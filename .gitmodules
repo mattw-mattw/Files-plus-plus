@@ -1,0 +1,3 @@
+[submodule "MEGA.nz/sdk"]
+	path = MEGA.nz/sdk
+	url = https://github.com/meganz/sdk.git
