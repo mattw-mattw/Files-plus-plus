@@ -1,6 +1,4 @@
-
-// FilesPPDlg.cpp : implementation file
-//
+// Copyright 2019 The Files++ Authors.  Licence via 2-Clause BSD, see the LICENSE file.
 
 #include "stdafx.h"
 #include "Files++.h"
@@ -9,12 +7,10 @@
 #include "FilterDlg.h"
 #include "FilterDlg.h"
 #include "resource.h"
-#include "UserPassDialog.h"
 
 #include <chrono>
 #include <thread>
 #include <algorithm> 
-#include <WinIoCtl.h>
 #include <locale>
 #include <shlobj_core.h>
 #include <fstream>
@@ -205,175 +201,6 @@ PathCtrl::PathCtrl()
 	metaPath.SetLocalPath(StartPath());
 }
 
-bool MetaPath::Ascend()
-{
-	switch (pathType)
-	{
-	case TopShelf: {
-		return false;
-	}
-	case LocalFS: {
-		auto newPath = localPath.parent_path();
-		if (newPath == localPath)
-		{
-			localPath.clear();
-			pathType = LocalVolumes;
-		}
-		else
-		{
-			localPath = newPath;
-		}
-		return true;
-	}
-	case LocalVolumes: {
-		pathType = TopShelf;
-		return true;
-	}
-	case MegaAccount: {
-		pathType = TopShelf;
-		return true;
-	}
-	case MegaFS: {
-		unique_ptr<m::MegaNode> n(masp->getParentNode(mnode.get()));
-		if (n)
-		{
-			mnode.reset(n.release());
-		}
-		else
-		{
-			pathType = MegaAccount;
-			mnode.reset();
-		}
-		return true;
-	}
-	}
-	return false;
-}
-
-bool MetaPath::Descend(const Item& item)
-{
-	switch (pathType)
-	{
-	case TopShelf: {
-		if (auto i = dynamic_cast<const ItemMegaAccount*>(&item))
-		{
-			pathType = MegaAccount;
-			masp = i->masp;
-			mnode.reset();
-		}
-		else
-		{
-			pathType = LocalVolumes;
-		}
-		return true;
-	}
-	case LocalFS: {
-		fs::path newpath = localPath / fs::u8path(item.u8Name);
-		if (fs::is_directory(newpath))
-		{
-			localPath = newpath;
-			return true;
-		}
-		break;
-	}
-	case LocalVolumes: {
-		auto p = fs::u8path(item.u8Name + "\\");
-		if (fs::is_directory(p))
-		{
-			localPath = p;
-			pathType = LocalFS;
-			return true;
-		}
-		break;
-	}
-	case MegaAccount: {
-		if (auto i = dynamic_cast<const ItemMegaNode*>(&item))
-		{
-			mnode.reset(i->mnode->copy());
-			pathType = MegaFS;
-			return true;
-		}
-		else if (auto i = dynamic_cast<const ItemMegaInshare*>(&item))
-		{
-			mnode.reset(i->mnode->copy());
-			pathType = MegaFS;
-			return true;
-		}
-	}
-	case MegaFS: {
-		if (auto i = dynamic_cast<const ItemMegaNode*>(&item))
-		{
-			mnode.reset(i->mnode->copy());
-			return true;
-		}
-	}
-	}
-	return false;
-}
-
-void MetaPath::SetLocalPath(const fs::path& p)
-{
-	pathType = LocalFS;
-	localPath = p;
-}
-
-bool MetaPath::GetLocalPath(std::filesystem::path& p) const
-{
-	if (pathType == LocalFS)
-	{
-		p = localPath;
-		return true;
-	}
-	return false;
-}
-
-unique_ptr<FSReader> MetaPath::GetContentReader(HWND wnd, bool recurse) const
-{
-	switch (pathType)
-	{
-	case TopShelf: return make_unique<TopShelfReader>(wnd, recurse);
-	case LocalFS: return make_unique<LocalFSReader>(localPath, wnd, recurse);
-	case LocalVolumes: return make_unique<LocalVolumeReader>(wnd, recurse);
-	case MegaAccount: return make_unique<MegaAccountReader>(masp, wnd, recurse);
-	case MegaFS: return make_unique<MegaFSReader>(masp, mnode.copy(), wnd, recurse);
-	default: assert(false);
-	}
-	return nullptr;
-}
-
-std::string MetaPath::u8DisplayPath() const
-{
-	switch (pathType)
-	{
-	case TopShelf: return "<Top Shelf>";
-	case LocalFS: return localPath.u8string();
-	case LocalVolumes: return "<Local Volumes>";
-	case MegaAccount: {
-		std::unique_ptr<char[]> e(masp->getMyEmail());
-		return string(e.get());
-	}
-	case MegaFS: {
-		std::unique_ptr<char[]> p(masp->getNodePath(mnode.get()));
-		return string(p.get());
-	}
-	}
-	return "";
-}
-
-bool MetaPath::operator==(const MetaPath& o) const
-{
-	if (pathType != o.pathType) return false;
-	switch (pathType)
-	{
-	case TopShelf: return true;
-	case LocalFS: return localPath == o.localPath;
-	case LocalVolumes: return true;
-	case MegaAccount: return masp == o.masp;
-	case MegaFS: return masp == o.masp && mnode->getHandle() == o.mnode->getHandle();
-	}
-	return false;
-}
-
 void PathCtrl::SetWindowText()
 {
 	::SetWindowTextA(m_hWnd, metaPath.u8DisplayPath().c_str());
@@ -476,413 +303,10 @@ BOOL CFilesPPDlg::OnInitDialog()
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
-struct OneTimeListener : public m::MegaRequestListener
-{
-	std::function<void(m::MegaRequest *request, m::MegaError* e)> fn;
-
-	OneTimeListener(std::function<void(m::MegaRequest *request, m::MegaError* e)> f) : fn(f) {}
-
-	void onRequestFinish(m::MegaApi*, m::MegaRequest *request, m::MegaError* e) override
-	{
-		fn(request, e);
-		delete this;
-	}
-};
-
-void FSReader::Send()
-{
-	if (!currentitems.empty())
-	{
-		auto v = new vector<unique_ptr<Item>>();
-		v->swap(currentitems);
-		PostMessage(hwnd, WM_APP_CONTENTUPDATE, (WPARAM)currentaction, (LPARAM)v);
-	}
-	currentaction = INVALID_ACTION;
-}
-
-void FSReader::Queue(Action action, unique_ptr<Item>&& p)
-{
-	if (currentitems.size() >= 100 || (currentaction != action && !(action == RENAMEDFROM && currentaction == RENAMEDFROM)))
-	{
-		Send();
-	}
-	currentaction = action;
-	currentitems.emplace_back(move(p));
-}
-
-fs::path MEGA::BasePath()
-{
-	TCHAR szPath[MAX_PATH];
-	if (!SUCCEEDED(SHGetFolderPath(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, szPath)))
-	{
-		AfxMessageBox(_T("Could not get local appdata path"));
-		return fs::path();
-	}
-	fs::path p(szPath);
-	return p / fs::path("Files++");
-}
 
 
-MEGA::MEGA()
-{
-	fs::path base = BasePath();
-
-	for (auto d = fs::directory_iterator(base); d != fs::directory_iterator(); ++d)
-	{
-		string sid;
-		ifstream f(d->path() / "sid");
-		f >> sid;
-		if (!sid.empty())
-		{
-			auto masp = make_shared<m::MegaApi>("BTgWXaYb", d->path().u8string().c_str(), "Files++");
-			megaAccounts.push_back(masp);
-			masp->fastLogin(sid.c_str(), new OneTimeListener([this, masp](m::MegaRequest *request, m::MegaError* e) { onLogin(*e, masp); }));
-		}
-	}
-}
-
-void MEGA::onLogin(const m::MegaError& e, const shared_ptr<m::MegaApi>& masp)
-{
-	if (e.getErrorCode()) AfxMessageBox(CA2CT(to_string(e.getErrorCode()).c_str()));
-	else
-	{
-		masp->fetchNodes(new OneTimeListener([](m::MegaRequest *request, m::MegaError* e) 
-				{ 
-					if (e->getErrorCode()) AfxMessageBox(CA2CT(("fetchnodes: " + to_string(e->getErrorCode())).c_str()));
-				}));
-	}
-}
-
-std::pair<std::shared_ptr<m::MegaApi>, fs::path> MEGA::makeTempAccount()
-{
-	fs::path p = BasePath() / to_string(time(NULL));
-	fs::create_directories(p);
-	return make_pair(make_shared<m::MegaApi>("BTgWXaYb", p.u8string().c_str(), "Files++"), p);
-}
-
-void MEGA::add(std::shared_ptr<m::MegaApi> p, std::filesystem::path path) {
-	std::lock_guard g(m); 
-	megaAccounts.push_back(p);
-	unique_ptr<char[]> sidvalue(p->dumpSession());
-	fs::path sidFile = path / "sid";
-	std::ofstream sid(path / "sid");
-	sid << sidvalue.get();
-}
-
-TopShelfReader::TopShelfReader(HWND targetwindow, bool r)
-	: FSReader(targetwindow, r)
-	, workerthread([this]() { Threaded(); })
-{
-}
-
-TopShelfReader::~TopShelfReader()
-{
-	cancelling = true;
-	workerthread.join();
-}
-
-void TopShelfReader::Threaded()
-{
-	Queue(NEWITEM, make_unique<Item>("<Local Volumes>"));
-	auto megaAccounts = g_mega->accounts();
-	for (auto& p : megaAccounts)
-	{
-		unique_ptr<char[]> email(p->getMyEmail());
-		Queue(NEWITEM, make_unique<ItemMegaAccount>(email.get() ? email.get() : "<loading>", p));
-	}
-	Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-	Send();
-}
-
-void TopShelfReader::AddMEGAAccount()
-{
-	auto [masp, path] = g_mega->makeTempAccount();
-
-	UserPassDialog dlg;
-	for (;;)
-	{
-		if (IDOK == dlg.DoModal())
-		{
-			bool done = false, success = false;
-			masp->login(CT2CA(dlg.name), CT2CA(dlg.password), new OneTimeListener([&](m::MegaRequest *, m::MegaError* e) { success = e->getErrorCode() == m::MegaError::API_OK; done = true;  }));
-			while (!done) Sleep(100);
-			if (success)
-			{
-				g_mega->add(masp, path);
-				AfxMessageBox(_T("Login succeeded"));
-				g_mega->onLogin(m::MegaError(0), masp);
-				return;
-			}
-			AfxMessageBox(_T("Login failed"));
-			continue;
-		}
-		else break;
-	}
-	std::error_code ec;
-	fs::remove_all(path, ec);
-}
-
-void TopShelfReader::AddMenuItems(CMenu& m, int& id, map<int, std::function<void()>>& me)
-{
-	m.AppendMenu(MF_SEPARATOR, id++, LPCTSTR(nullptr));
-
-	m.AppendMenu(MF_STRING, id, _T("Add MEGA Account"));
-	me[id] = [this]() { AddMEGAAccount();  };
-	++id;
-}
-
-LocalVolumeReader::LocalVolumeReader(HWND targetwindow, bool r)
-	: FSReader(targetwindow, r)
-	, workerthread([this]() { Threaded(); })
-{
-	memset(&overlapped, 0, sizeof(overlapped));
-}
-
-LocalVolumeReader::~LocalVolumeReader()
-{
-	cancelling = true;
-	workerthread.join();
-}
-
-void LocalVolumeReader::Threaded()
-{
-	wstring s;
-	DWORD n = GetLogicalDriveStringsW(0, s.data());
-	s.resize(n);
-	n = GetLogicalDriveStringsW(n, s.data());
-
-	while (s.length() > 1)
-	{
-		auto len2 = wcslen(s.c_str());
-		auto len = len2;
-		if (len > 0 && s.c_str()[len - 1] == _T('\\')) --len;
-		if (len > 0)
-		{
-			string n = wstring_convert<codecvt_utf8_utf16<wchar_t>, wchar_t>{}.to_bytes(s.substr(0, len));
-
-			ULARGE_INTEGER freebytesforcaller, totalbytes, freebytes;
-			GetDiskFreeSpaceExA(n.c_str(), &freebytesforcaller, &totalbytes, &freebytes);
-
-			Queue(NEWITEM, make_unique<ItemLocalFS>(n, totalbytes.QuadPart, true));
-		}
-		s.erase(0, len2 + 1);
-	}
-	Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-	Send();
-}
-
-LocalFSReader::LocalFSReader(fs::path p, HWND targetwindow, bool r) 
-	: FSReader(targetwindow, r)
-	, dir(p)
-{
-	memset(&overlapped, 0, sizeof(overlapped));
-	workerthread = std::thread([this]() { Threaded(); });
-}
-
-LocalFSReader::~LocalFSReader()
-{
-	cancelling = true;
-	if (hDirectory != INVALID_HANDLE_VALUE) CancelIoEx(hDirectory, &overlapped);
-	workerthread.join();
-}
-
-bool LocalFSReader::ReadDir(const fs::path& p, bool recurse, const fs::path& recurseprefix)
-{
-	// read directory now
-	try
-	{
-		int insertPos = 0;
-		for (fs::directory_iterator i(p); i != fs::directory_iterator(); ++i, ++insertPos)
-		{
-			fs::path relativename = recurseprefix / i->path().filename();
-			if (i->is_directory())
-			{
-				Queue(NEWITEM, make_unique<ItemLocalFS>(relativename.u8string(), -1, true));
-				if (recurse && !ReadDir(i->path(), true, relativename)) return false;
-			}
-			else if (i->is_regular_file())
-			{
-				Queue(NEWITEM, make_unique<ItemLocalFS>(relativename.u8string(), i->file_size(), false));
-			}
-		}
-		return true;
-	}
-	catch (std::exception& )
-	{
-		//Queue(FILE_ACTION_APP_ERROR, unique_ptr<Item>(new ItemError("Error reading directory: " + string(e.what()))));
-		//AfxMessageBox(e.what(), IDOK);
-		//return false;
-		return true;
-	}
-}
-
-bool LocalFSReader::RequestChanges()
-{
-	return ReadDirectoryChangesW(hDirectory, (LPVOID)overlappedbuf.data(), (DWORD)overlappedbuf.size(), recurse,
-		FILE_NOTIFY_CHANGE_FILE_NAME
-		| FILE_NOTIFY_CHANGE_DIR_NAME
-		| FILE_NOTIFY_CHANGE_LAST_WRITE
-		| FILE_NOTIFY_CHANGE_SIZE
-		| FILE_NOTIFY_CHANGE_CREATION, NULL, &overlapped, NULL);
-}
-
-
-std::wstring checkIfFolderIsReparsePoint(HANDLE h)
-{
-	// from ms doco: not available in headers
-	typedef struct _REPARSE_DATA_BUFFER {
-		ULONG  ReparseTag;
-		USHORT ReparseDataLength;
-		USHORT Reserved;
-		union {
-			struct {
-				USHORT SubstituteNameOffset;
-				USHORT SubstituteNameLength;
-				USHORT PrintNameOffset;
-				USHORT PrintNameLength;
-				ULONG  Flags;
-				WCHAR  PathBuffer[1];
-			} SymbolicLinkReparseBuffer;
-			struct {
-				USHORT SubstituteNameOffset;
-				USHORT SubstituteNameLength;
-				USHORT PrintNameOffset;
-				USHORT PrintNameLength;
-				WCHAR  PathBuffer[1];
-			} MountPointReparseBuffer;
-			struct {
-				UCHAR DataBuffer[1];
-			} GenericReparseBuffer;
-		} DUMMYUNIONNAME;
-	} REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
-
-	// Allocate the reparse data structure
-	DWORD dwBufSize = MAXIMUM_REPARSE_DATA_BUFFER_SIZE;
-	unique_ptr<char[]> rdatabuf(new char[dwBufSize]);
-	PREPARSE_DATA_BUFFER rdata = (PREPARSE_DATA_BUFFER)rdatabuf.get();
-
-	// Query the reparse data
-	DWORD dwRetLen;
-	if (rdata && 
-		DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, NULL, 0, rdata, dwBufSize, &dwRetLen, NULL) &&
-		IsReparseTagMicrosoft(rdata->ReparseTag))
-	{
-		if (rdata->ReparseTag == IO_REPARSE_TAG_SYMLINK)
-		{
-			size_t slen = rdata->SymbolicLinkReparseBuffer.SubstituteNameLength / sizeof(WCHAR);
-			if (slen > 0) return std::wstring(&rdata->SymbolicLinkReparseBuffer.PathBuffer[rdata->SymbolicLinkReparseBuffer.SubstituteNameOffset / sizeof(WCHAR)], slen);
-			size_t plen = rdata->SymbolicLinkReparseBuffer.PrintNameLength / sizeof(WCHAR);
-			if (plen > 0) return std::wstring(&rdata->SymbolicLinkReparseBuffer.PathBuffer[rdata->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(WCHAR)], plen);
-		}
-		else if (rdata->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT)
-		{
-			size_t slen = rdata->MountPointReparseBuffer.SubstituteNameLength / sizeof(WCHAR);
-			if (slen > 0) return std::wstring(&rdata->MountPointReparseBuffer.PathBuffer[rdata->MountPointReparseBuffer.SubstituteNameOffset / sizeof(WCHAR)], slen);
-			size_t plen = rdata->MountPointReparseBuffer.PrintNameLength / sizeof(WCHAR);
-			if (plen > 0) return std::wstring(&rdata->MountPointReparseBuffer.PathBuffer[rdata->MountPointReparseBuffer.PrintNameOffset / sizeof(WCHAR)], plen);
-		}
-	}
-	return std::wstring();
-}
-
-void LocalFSReader::Threaded()
-{
-	hDirectory = CreateFileW(dir.wstring().c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE , NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, NULL);
-	if (hDirectory == INVALID_HANDLE_VALUE)
-	{
-		error_code ec((int)GetLastError(), system_category());
-
-		// check if we can open it as a reparse point (soft link) instead
-		hDirectory = CreateFileW(dir.wstring().c_str(), FILE_READ_EA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
-		if (hDirectory != INVALID_HANDLE_VALUE)
-		{
-			// get the reparse point actual path
-
-			std::wstring actualfolder = checkIfFolderIsReparsePoint(hDirectory);
-			if (!actualfolder.empty())
-			{
-				hDirectory = CreateFileW(actualfolder.c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, NULL);
-				if (hDirectory != INVALID_HANDLE_VALUE)
-				{
-					if (actualfolder.find(L"\\\\?\\") == 0) actualfolder.erase(0, 4);  // extended-length path prefix "\\?\"
-					if (actualfolder.find(L"\\??\\") == 0) actualfolder.erase(0, 4);  // seen in practice "\??\"
-					dir = fs::path(actualfolder);
-					Queue(FOLDER_RESOLVED_SOFTLINK, make_unique<ItemLocalFS>(dir.u8string(), -1, true));
-				}
-			}
-		}
-
-		if (hDirectory == INVALID_HANDLE_VALUE)
-		{
-			Queue(FILE_ACTION_APP_ERROR, unique_ptr<Item>(new ItemError("Could not read directory: " + ec.message())));
-			Send();
-			return;
-		}
-	}
-
-	// overlapped so we can make a first call now, which initialises its internal buffer, so we don't lose any notifications that occur during initial scan (unless overflow occurs)
-	memset(&overlapped, 0, sizeof(overlapped));
-	overlappedbuf.resize(48 * 1024);
-	bool notifyOk = RequestChanges();
-
-	ReadDir(dir, recurse, "");
-	Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-	Send();
-
-	// and scan for changes (including any that occured while reading)
-	DWORD dwBytes = 0;
-	while (notifyOk && !cancelling && GetOverlappedResultEx(hDirectory, &overlapped, &dwBytes, INFINITE, FALSE))
-	{
-		char* ptr = (char*)overlappedbuf.data();
-		while ((int)dwBytes >= sizeof(FILE_NOTIFY_INFORMATION))
-		{
-			FILE_NOTIFY_INFORMATION* fni = (FILE_NOTIFY_INFORMATION*)ptr;
-
-			if ((char*)&fni->FileName + fni->FileNameLength - (char*)fni > (int)dwBytes) break;
-
-			fs::path p(wstring(fni->FileName, fni->FileNameLength/sizeof(wchar_t)));
-
-			switch (fni->Action)
-			{
-			case FILE_ACTION_ADDED:		
-				{
-					error_code ec;
-					auto s = fs::directory_entry(dir / p, ec);
-					if (!ec && fs::is_directory(s)) Queue(NEWITEM, make_unique<ItemLocalFS>(p.u8string(), -1, true));
-					if (!ec && fs::is_regular_file(s)) Queue(NEWITEM, make_unique<ItemLocalFS>(p.u8string(), s.file_size(), false));
-					break;
-				}
-			case FILE_ACTION_REMOVED:	
-				Queue(DELETEDITEM, make_unique<ItemLocalFS>(p.u8string(), -1, false));
-				break;
-
-			case FILE_ACTION_RENAMED_OLD_NAME:
-				Queue(RENAMEDFROM, make_unique<ItemLocalFS>(p.u8string(), -1, false));
-				break;
-
-			case FILE_ACTION_RENAMED_NEW_NAME:
-				Queue(RENAMEDTO, make_unique<ItemLocalFS>(p.u8string(), -1, false));
-				break;
-			}
-
-			ptr += fni->NextEntryOffset;
-			dwBytes -= fni->NextEntryOffset ? fni->NextEntryOffset : dwBytes;
-		}
-		Send();
-
-		// kick off a new query (notifications in the meantime will have been queued in its internal buffer)
-		notifyOk = RequestChanges();
-	}
-
-	if (!cancelling && !notifyOk)
-	{
-		Queue(FILE_ACTION_APP_NOTIFY_FAILURE, NULL);
-		Send();
-	}
-}
-
-MegaAccountReader::MegaAccountReader(std::shared_ptr<m::MegaApi> p, HWND targetwindow, bool r)
-	: FSReader(targetwindow, r)
+MegaAccountReader::MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r)
+	: FSReader(t, r)
 	, masp(p)
 	, workerthread([this]() { Threaded(); })
 {
@@ -917,8 +341,8 @@ void MegaAccountReader::Threaded()
 	Send();
 }
 
-MegaFSReader::MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode> n, HWND targetwindow, bool r)
-	: FSReader(targetwindow, r)
+MegaFSReader::MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r)
+	: FSReader(t, r)
 	, masp(p)
 	, mnode(move(n))
 	, workerthread([this]() { Threaded(); })
@@ -1000,7 +424,9 @@ void CFilesPPDlg::LoadContent(bool resetFilter)
 	}
 	filter.reset(new Filter(filterSettings, *this));
 
-	activeReader = m_pathCtl.metaPath.GetContentReader(m_hWnd, filterSettings.recursesubfolders);
+	FSReader::QueueTrigger t = [wnd = m_hWnd]() { ::PostMessage(wnd, WM_APP_CONTENTUPDATE, (WPARAM)0, (LPARAM)0); };
+
+	activeReader = m_pathCtl.metaPath.GetContentReader(t, filterSettings.recursesubfolders);
 }
 
 
@@ -1042,11 +468,14 @@ void sort_match_removeintersection(T1& a, T2& b, std::function<bool(typename T1:
 			writinga = true;
 		}
 	}
-	while (ra != a.end())
+	if (writinga)
 	{
-		if (writinga) *(wa++) = move(*(ra++));
+		while (ra != a.end())
+		{
+			*(wa++) = move(*(ra++));
+		}
+		a.erase(wa, a.end());
 	}
-	a.erase(wa, a.end());
 }
 
 template<class T1, class T2>
@@ -1090,47 +519,48 @@ std::function<bool(unique_ptr<Item>& a, unique_ptr<Item>& b)> MetaPath::nodeComp
 
 LRESULT CFilesPPDlg::OnContentUpdate(WPARAM wParam, LPARAM lParam)
 {
-	unique_ptr<vector<unique_ptr<Item>>> newitems((vector<unique_ptr<Item>>*)lParam);
-
-	switch (FSReader::Action(wParam))
+	
+	FSReader::Entry entry;
+	while (activeReader->q.pop(entry))
 	{
-	case FSReader::NEWITEM:
-	case FSReader::RENAMEDTO:
-		if (filter) filter->FilterNewItems(*newitems);
-
-		//items.reserve(items.size() + newitems->size());
-		for (auto& i : *newitems) items.emplace_back(move(i));
-		break;
-
-	case FSReader::DELETEDITEM:
-	case FSReader::RENAMEDFROM:
-		sort_match_removeintersection(items, *newitems, m_pathCtl.metaPath.nodeCompare());
-		remove_if_absent(m_contentCtl.filteredItems, items);
-		m_contentCtl.SetItemCount(m_contentCtl.filteredItems.size());
-		break;
-
-	case FSReader::FILE_ACTION_APP_ERROR:
-		AfxMessageBox(_T("The directory could not be read"));
-		break;
-
-	case FSReader::FILE_ACTION_APP_NOTIFY_FAILURE:
-		AfxMessageBox(_T("Notifications are not working, file changes will not be reflected"));
-		break;
-
-	case FSReader::FILE_ACTION_APP_READCOMPLETE:
-		ContentEstablished();
-		break;
-
-	case FSReader::FOLDER_RESOLVED_SOFTLINK:
-		if (auto p = dynamic_cast<LocalFSReader*>(activeReader.get()))
+		switch (entry.action)
 		{
-			m_pathCtl.metaPath.SetLocalPath(p->dir);
-			m_pathCtl.SetWindowText();
+		case FSReader::NEWITEM:
+		case FSReader::RENAMEDTO:
+			if (filter) filter->FilterNewItems(entry.batch);
+
+			for (auto& i : entry.batch) items.emplace_back(move(i));
+			break;
+
+		case FSReader::DELETEDITEM:
+		case FSReader::RENAMEDFROM:
+			sort_match_removeintersection(items, entry.batch, m_pathCtl.metaPath.nodeCompare());
+			remove_if_absent(m_contentCtl.filteredItems, items);
+			m_contentCtl.SetItemCount(m_contentCtl.filteredItems.size());
+			break;
+
+		case FSReader::FILE_ACTION_APP_ERROR:
+			AfxMessageBox(_T("The directory could not be read"));
+			break;
+
+		case FSReader::FILE_ACTION_APP_NOTIFY_FAILURE:
+			AfxMessageBox(_T("Notifications are not working, file changes will not be reflected"));
+			break;
+
+		case FSReader::FILE_ACTION_APP_READCOMPLETE:
+			ContentEstablished();
+			break;
+
+		case FSReader::FOLDER_RESOLVED_SOFTLINK:
+			if (auto p = dynamic_cast<LocalFSReader*>(activeReader.get()))
+			{
+				m_pathCtl.metaPath.SetLocalPath(p->dir);
+				m_pathCtl.SetWindowText();
+			}
+			break;
 		}
-		break;
+
 	}
-
-
 	
 	return 0;
 }
@@ -1487,7 +917,7 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 		if (activeReader)
 		{
 			int menuid = MENU_SUBSEQUENT;
-			activeReader->AddMenuItems(contextMenu, menuid, menuexec);
+			//activeReader->AddMenuItems(contextMenu, menuid, menuexec);
 		}
 
 		ClientToScreen(&pNMItemActivate->ptAction);

@@ -1,3 +1,4 @@
+# Copyright 2019 The Files++ Authors.  Licence via 2-Clause BSD, see the LICENSE file.
 
 cmake_minimum_required(VERSION 3.14)
 project("Files++")
@@ -13,13 +14,18 @@ if (WIN32)
 	set (CMAKE_MFC_FLAG 1)  # 1: use MFC as a static library
 
 	add_executable("Files++" 
+			core/MEGA.cpp core/MEGA.h
+			core/FSReader.cpp core/FSReader.h
+			core/MetaPath.cpp core/MetaPath.h
 			windows/Files++.cpp windows/Files++.h
 			windows/Files++.rc 
 			windows/Files++Dlg.cpp windows/Files++Dlg.h
 			windows/FilterDlg.cpp windows/FilterDlg.h
+			windows/LocalFSReader.cpp windows/LocalFSReader.h
 			windows/stdafx.cpp windows/stdafx.h
 			windows/targetver.h
 			windows/UserPassDialog.cpp windows/UserPassDialog.h
+			windows/PlatformSupplied.cpp
 	)
 	target_link_libraries("Files++" PUBLIC Mega)
 

@@ -1,6 +1,4 @@
-
-// FilesPP.h : main header file for the PROJECT_NAME application
-//
+// Copyright 2019 The Files++ Authors.  Licence via 2-Clause BSD, see the LICENSE file.
 
 #pragma once
 

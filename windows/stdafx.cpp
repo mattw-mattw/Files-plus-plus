@@ -1,7 +1,4 @@
-
-// stdafx.cpp : source file that includes just the standard includes
-// FilesPP.pch will be the pre-compiled header
-// stdafx.obj will contain the pre-compiled type information
+// Copyright 2019 The Files++ Authors.  Licence via 2-Clause BSD, see the LICENSE file.
 
 #include "stdafx.h"
 
