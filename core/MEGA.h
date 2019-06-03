@@ -12,21 +12,32 @@
 #include <megaapi.h>
 namespace m = ::mega;
 
-class MEGA
+struct MEGA
 {
-	std::mutex m;
-	std::vector<std::shared_ptr<m::MegaApi>> megaAccounts;
+	typedef std::shared_ptr<m::MegaApi> ApiPtr;
 
-public:
+	struct Account
+	{
+		std::filesystem::path cacheFolder;
+		ApiPtr masp;
+		Account(const std::filesystem::path& p, ApiPtr ap) : cacheFolder(p), masp(ap) {}
+	};
 
 	MEGA();
+	~MEGA();
 
-	std::vector<std::shared_ptr<m::MegaApi>> accounts() { std::lock_guard g(m); return megaAccounts; }
+	std::vector<ApiPtr> accounts() { std::vector<ApiPtr> v; std::lock_guard g(m); for (auto& a : megaAccounts) v.push_back(a.masp); return v; }
 
-	std::pair<std::shared_ptr<m::MegaApi>, std::filesystem::path> makeTempAccount();
-	void add(std::shared_ptr<m::MegaApi> p, std::filesystem::path path);
+	Account makeTempAccount();
+	void add(const Account&);
+	void logoutremove(ApiPtr masp);
+	void deletecache(ApiPtr masp);
 
 	void onLogin(const m::MegaError* e, const std::shared_ptr<m::MegaApi>& masp);
+
+private:
+	std::mutex m;
+	std::vector<Account> megaAccounts;
 };
 
 extern MEGA* g_mega;
@@ -37,7 +48,7 @@ struct NodeUpdateListener : public m::MegaGlobalListener
 
 	void onNodesUpdate(m::MegaApi*, m::MegaNodeList* nodes) override
 	{
-		nq.push(std::unique_ptr<m::MegaNodeList>(nodes->copy()));
+		nq.push(std::unique_ptr<m::MegaNodeList>(nodes ? nodes->copy() : nullptr));
 	}
 };
 

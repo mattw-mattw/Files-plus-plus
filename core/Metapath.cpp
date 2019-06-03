@@ -150,7 +150,7 @@ std::string MetaPath::u8DisplayPath() const
 	case LocalVolumes: return "<Local Volumes>";
 	case MegaAccount: {
 		std::unique_ptr<char[]> e(masp->getMyEmail());
-		return string(e.get());
+		return string(e ? e.get() : "<null>");
 	}
 	case MegaFS: {
 		std::unique_ptr<char[]> p(masp->getNodePath(mnode.get()));

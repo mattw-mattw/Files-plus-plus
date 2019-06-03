@@ -8,7 +8,7 @@
 struct FSReader
 {
 	enum Action {
-		FILE_ACTION_APP_ERROR, FILE_ACTION_APP_NOTIFY_FAILURE, FILE_ACTION_APP_READCOMPLETE, FOLDER_RESOLVED_SOFTLINK,
+		FILE_ACTION_APP_ERROR, FILE_ACTION_APP_NOTIFY_FAILURE, FILE_ACTION_APP_READCOMPLETE, FILE_ACTION_APP_READRESTARTED, FOLDER_RESOLVED_SOFTLINK,
 		NEWITEM, DELETEDITEM, RENAMEDFROM, RENAMEDTO, INVALID_ACTION
 	};
 
@@ -22,7 +22,7 @@ struct FSReader
 	NotifyQueue<Entry> q;
 
 	typedef std::vector<std::pair<std::string, std::function<void()>>> MenuActions;
-	virtual MenuActions GetMenuActions() { return MenuActions(); }
+	virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) { return MenuActions(); }
 
 protected:
 	bool recurse = false;
@@ -41,7 +41,7 @@ struct TopShelfReader : public FSReader
 	TopShelfReader(QueueTrigger t, bool r);
 	~TopShelfReader();
 
-	MenuActions GetMenuActions() override;
+	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
 
 private:
 	void Threaded();
@@ -70,6 +70,8 @@ struct MegaAccountReader : public FSReader
 {
 	MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r);
 	~MegaAccountReader();
+
+	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
 
 private:
 	void Threaded();

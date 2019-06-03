@@ -25,7 +25,7 @@ MEGA::MEGA()
 				if (!sid.empty() && LocalUserCrypt(sid, false))
 				{
 					auto masp = make_shared<m::MegaApi>("BTgWXaYb", d->path().u8string().c_str(), "Files++");
-					megaAccounts.push_back(masp);
+					megaAccounts.emplace_back(d->path(), masp);
 					masp->fastLogin(sid.c_str(), new OneTimeListener([this, masp](m::MegaRequest* request, m::MegaError* e) { onLogin(e, masp); }));
 				}
 				else
@@ -45,6 +45,15 @@ MEGA::MEGA()
 	}
 }
 
+MEGA::~MEGA()
+{
+	std::lock_guard g(m);
+	for (auto& a : megaAccounts)
+	{
+		a.masp.reset();  // should be deleted at this point
+	}
+}
+
 void MEGA::onLogin(const m::MegaError* e, const shared_ptr<m::MegaApi>& masp)
 {
 	if (e && e->getErrorCode())
@@ -60,20 +69,66 @@ void MEGA::onLogin(const m::MegaError* e, const shared_ptr<m::MegaApi>& masp)
 	}
 }
 
-std::pair<std::shared_ptr<m::MegaApi>, fs::path> MEGA::makeTempAccount()
+MEGA::Account MEGA::makeTempAccount()
 {
 	fs::path p = BasePath() / to_string(time(NULL));
 	fs::create_directories(p);
-	return make_pair(make_shared<m::MegaApi>("BTgWXaYb", p.u8string().c_str(), "Files++"), p);
+	return Account(p, make_shared<m::MegaApi>("BTgWXaYb", p.u8string().c_str(), "Files++"));
 }
 
-void MEGA::add(std::shared_ptr<m::MegaApi> p, std::filesystem::path path) {
+void MEGA::add(const Account& a) {
 	std::lock_guard g(m);
-	megaAccounts.push_back(p);
-	unique_ptr<char[]> sidvalue(p->dumpSession());
+	unique_ptr<char[]> sidvalue(a.masp->dumpSession());
 	string sidvaluestr(sidvalue.get());
-	fs::path sidFile = path / "sid";
-	std::ofstream sid(path / "sid", ios::binary);
-	if (LocalUserCrypt(sidvaluestr, true)) sid << sidvaluestr;
-	else ReportError("Failed to encrypt SID");
+	fs::path sidFile = a.cacheFolder / "sid";
+	std::ofstream sid(sidFile, ios::binary);
+	if (LocalUserCrypt(sidvaluestr, true))
+	{
+		if (sid << sidvaluestr << flush)
+		{
+			megaAccounts.push_back(a);
+			return;
+		}
+	}
+	sid.close();
+	std::error_code ec;
+	fs::remove_all(a.cacheFolder, ec);
+	ReportError("Failed to encrypt or write SID");
+}
+
+void MEGA::logoutremove(std::shared_ptr<m::MegaApi> masp)
+{
+	if (masp->isLoggedIn())
+	{
+		masp->logout(new OneTimeListener([this, masp](m::MegaRequest*, m::MegaError* e) {
+			if (e && e->getErrorCode() != m::MegaError::API_OK) ReportError("Logout error: ", e);
+			deletecache(masp);
+			}));
+	}
+	else
+	{
+		deletecache(masp);
+	}
+}
+
+void MEGA::deletecache(std::shared_ptr<m::MegaApi> masp)
+{
+	std::lock_guard g(m);
+	for (auto it = megaAccounts.begin(); it != megaAccounts.end(); ++it)
+	{
+		if (it->masp == masp)
+		{
+			std::error_code ec;
+			fs::remove_all(it->cacheFolder, ec);
+			if (ec)
+			{
+				ReportError("Could not delete cache folder: " + ec.message());
+			}
+			else
+			{
+				megaAccounts.erase(it);
+				return;
+			}
+		}
+	}
 }

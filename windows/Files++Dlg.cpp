@@ -107,13 +107,27 @@ CFilesPPDlg::CFilesPPDlg(CWnd* pParent /*=nullptr*/)
 	++atomicInstances;
 }
 
+void CFilesPPDlg::OnDestroy()
+{
+	CDialogEx::OnDestroy();
+}
+
 CFilesPPDlg::~CFilesPPDlg()
 {
+	activeReader.reset();
+
 	--atomicInstances;
-	shutdown_cv.notify_all();
+	if (!atomicInstances)
+	{
+		delete g_mega;
+		++atomicExitOk;
+		shutdown_cv.notify_all();
+	}
 }
 
 std::atomic<unsigned> CFilesPPDlg::atomicInstances;
+std::atomic<unsigned> CFilesPPDlg::atomicExitOk;
+
 std::condition_variable CFilesPPDlg::shutdown_cv;
 
 BOOL CFilesPPDlgThread::InitInstance() 
@@ -138,6 +152,7 @@ void CFilesPPDlg::DoDataExchange(CDataExchange* pDX)
 BEGIN_MESSAGE_MAP(CFilesPPDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_CLOSE()
+	ON_WM_DESTROY()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BUTTON1, &CFilesPPDlg::OnBnClickedButton1)
@@ -303,113 +318,6 @@ BOOL CFilesPPDlg::OnInitDialog()
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
-
-
-MegaAccountReader::MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r)
-	: FSReader(t, r)
-	, masp(p)
-	, workerthread([this]() { Threaded(); })
-{
-}
-
-MegaAccountReader::~MegaAccountReader()
-{
-	cancelling = true;
-	workerthread.join();
-}
-
-void MegaAccountReader::Threaded()
-{
-	unique_ptr<m::MegaNode> root(masp->getRootNode());
-	unique_ptr<m::MegaNode> inbox(masp->getInboxNode());
-	unique_ptr<m::MegaNode> rubbish(masp->getRubbishNode());
-
-	Queue(NEWITEM, make_unique<ItemMegaNode>(move(root)));
-	Queue(NEWITEM, make_unique<ItemMegaNode>(move(inbox)));
-	Queue(NEWITEM, make_unique<ItemMegaNode>(move(rubbish)));
-
-	unique_ptr<m::MegaNodeList> inshares(masp->getInShares());
-	if (inshares)
-	{
-		for (int i = 0; i < inshares->size(); ++i)
-		{
-			Queue(NEWITEM, make_unique<ItemMegaInshare>(std::unique_ptr<m::MegaNode>(inshares->get(i)->copy()), *masp, -1, true));
-		}
-	}
-
-	Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-	Send();
-}
-
-MegaFSReader::MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r)
-	: FSReader(t, r)
-	, masp(p)
-	, mnode(move(n))
-	, workerthread([this]() { Threaded(); })
-{
-}
-
-MegaFSReader::~MegaFSReader()
-{
-	cancelling = true;
-	listener.nq.push(nullptr);
-	workerthread.join();
-}
-
-void MegaFSReader::Threaded()
-{
-	masp->addGlobalListener(&listener);
-
-	unique_ptr<m::MegaChildrenLists> mc(masp->getFileFolderChildren(mnode.get()));
-	if (mc)
-	{
-		m::MegaNodeList* folders = mc->getFolderList();
-		m::MegaNodeList* files = mc->getFileList();
-
-		for (int i = 0; i < folders->size(); ++i)
-		{
-			Queue(NEWITEM, make_unique<ItemMegaNode>(std::unique_ptr<m::MegaNode>(folders->get(i)->copy())));
-		}
-		for (int i = 0; i < files->size(); ++i)
-		{
-			Queue(NEWITEM, make_unique<ItemMegaNode>(std::unique_ptr<m::MegaNode>(files->get(i)->copy())));
-		}
-	}
-	Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-	Send();
-
-	while (!cancelling)
-	{
-		unique_ptr<m::MegaNodeList> nodes;
-		if (listener.nq.pop(nodes) && nodes)
-		{
-			for (int i = 0; i < nodes->size(); ++i)
-			{
-				auto n = nodes->get(i);
-				if (n->getParentHandle() == mnode->getHandle() && n->isFolder() || n->isFile())
-				{
-					if (n->hasChanged(m::MegaNode::CHANGE_TYPE_REMOVED))
-					{
-						Queue(DELETEDITEM, make_unique<ItemMegaNode>(std::unique_ptr<m::MegaNode>(n->copy())));
-					}
-					else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_NEW))
-					{
-						Queue(NEWITEM, make_unique<ItemMegaNode>(std::unique_ptr<m::MegaNode>(n->copy())));
-					}
-					else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_ATTRIBUTES)) // could be renamed
-					{
-						Queue(DELETEDITEM, make_unique<ItemMegaNode>(std::unique_ptr<m::MegaNode>(n->copy())));
-						Queue(NEWITEM, make_unique<ItemMegaNode>(std::unique_ptr<m::MegaNode>(n->copy())));
-					}
-				}
-			}
-			Send();
-		}
-	}
-	masp->removeGlobalListener(&listener);
-}
-
-
 void CFilesPPDlg::LoadContent(bool resetFilter)
 {
 	m_pathCtl.SetWindowText();
@@ -549,6 +457,12 @@ LRESULT CFilesPPDlg::OnContentUpdate(WPARAM wParam, LPARAM lParam)
 
 		case FSReader::FILE_ACTION_APP_READCOMPLETE:
 			ContentEstablished();
+			break;
+
+		case FSReader::FILE_ACTION_APP_READRESTARTED:
+			m_contentCtl.SetItemCount(0);
+			m_contentCtl.filteredItems.clear();;
+			items.clear();
 			break;
 
 		case FSReader::FOLDER_RESOLVED_SOFTLINK:
@@ -905,6 +819,19 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 	CMenu contextMenu;
 	if (contextMenu.CreatePopupMenu())
 	{
+
+		auto selectedItems = make_shared<std::deque<Item*>>();
+		
+		POSITION pos = m_contentCtl.GetFirstSelectedItemPosition();
+		while (pos)
+		{
+			unsigned nItem = (unsigned)m_contentCtl.GetNextSelectedItem(pos);
+			if (nItem < m_contentCtl.filteredItems.size())
+			{
+				selectedItems->push_back(m_contentCtl.filteredItems[nItem]);
+			}
+		}
+
 		contextMenu.AppendMenu(MF_STRING, MENU_COPYNAMES, _T("Copy Names"));
 		contextMenu.AppendMenu(MF_STRING, MENU_COPYPATHS, _T("Copy Full Paths"));
 		contextMenu.AppendMenu(MF_STRING, MENU_COPYNAMESQUOTED, _T("Copy Names Quoted"));
@@ -915,7 +842,7 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 		map<int, std::function<void()>> menuexec;
 
 		FSReader::MenuActions ma;
-		if (activeReader) ma = activeReader->GetMenuActions();
+		if (activeReader) ma = activeReader->GetMenuActions(selectedItems);
 		if (!ma.empty())
 		{
 			contextMenu.AppendMenu(MF_SEPARATOR);
@@ -942,24 +869,18 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 			fs::path activePath;
 			if (m_pathCtl.metaPath.GetLocalPath(activePath))
 			{
-				POSITION pos = m_contentCtl.GetFirstSelectedItemPosition();
-				while (pos)
+				for (auto& item : *selectedItems)
 				{
-					unsigned nItem = (unsigned)m_contentCtl.GetNextSelectedItem(pos);
-					if (nItem < m_contentCtl.filteredItems.size())
-					{
-						Item& item = *m_contentCtl.filteredItems[nItem];
-						fs::path fullpath = activePath / fs::u8path(item.u8Name);
+					fs::path fullpath = activePath / fs::u8path(item->u8Name);
 
-						switch (result)
-						{
-						case MENU_COPYNAMES: ++lines; copyString += (item.u8Name + "\r\n").c_str();  break;
-						case MENU_COPYPATHS: ++lines; copyString += (fullpath.u8string() + "\r\n").c_str(); break;
-						case MENU_COPYNAMESQUOTED: ++lines; copyString += ("\"" + item.u8Name + "\"\r\n").c_str();  break;
-						case MENU_COPYPATHSQUOTED: ++lines; copyString += ("\"" + fullpath.u8string() + "\"\r\n").c_str(); break;
-						case MENU_EXPLORETO: ExploreTo(m_hWnd, fullpath); break;
-						case MENU_EXPLOREPROPERTIES: ExploreProperties(m_hWnd, fullpath); break;
-						}
+					switch (result)
+					{
+					case MENU_COPYNAMES: ++lines; copyString += (item->u8Name + "\r\n").c_str();  break;
+					case MENU_COPYPATHS: ++lines; copyString += (fullpath.u8string() + "\r\n").c_str(); break;
+					case MENU_COPYNAMESQUOTED: ++lines; copyString += ("\"" + item->u8Name + "\"\r\n").c_str();  break;
+					case MENU_COPYPATHSQUOTED: ++lines; copyString += ("\"" + fullpath.u8string() + "\"\r\n").c_str(); break;
+					case MENU_EXPLORETO: ExploreTo(m_hWnd, fullpath); break;
+					case MENU_EXPLOREPROPERTIES: ExploreProperties(m_hWnd, fullpath); break;
 					}
 				}
 			}

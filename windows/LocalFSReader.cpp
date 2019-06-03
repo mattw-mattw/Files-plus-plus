@@ -60,6 +60,14 @@ LocalFSReader::~LocalFSReader()
 	workerthread.join();
 }
 
+
+auto LocalFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
+{
+	MenuActions ma;
+	return ma;
+}
+
+
 bool LocalFSReader::ReadDir(const fs::path& p, bool recurse, const fs::path& recurseprefix)
 {
 	// read directory now

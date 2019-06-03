@@ -78,6 +78,7 @@ class CFilesPPDlg : public CDialogEx
 
 public:
 	static std::atomic<unsigned> atomicInstances;
+	static std::atomic<unsigned> atomicExitOk;
 	static std::condition_variable shutdown_cv;
 
 	CFilesPPDlg(CWnd* pParent = nullptr);	
@@ -136,6 +137,7 @@ public:
 	CSpinButtonCtrl m_spinCtrl;
 	afx_msg void OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult);
 	afx_msg void OnLvnItemchangedList2(NMHDR *pNMHDR, LRESULT *pResult);
+	afx_msg void OnDestroy();
 };
 
 

@@ -20,6 +20,8 @@ public:
 	LocalFSReader(std::filesystem::path p, QueueTrigger, bool r);
 	~LocalFSReader();
 
+	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
+
 private:
 	bool RequestChanges();
 	bool ReadDir(const std::filesystem::path& p, bool recurse, const std::filesystem::path& recurseprefix);

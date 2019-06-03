@@ -12,6 +12,7 @@ fs::path BasePath();
 void ReportError(const std::string& message, const m::MegaError* e = nullptr);
 
 void AddMEGAAccount();
+void RemoveMEGAAccount(std::shared_ptr<m::MegaApi>);
 
 std::unique_ptr<FSReader> NewLocalFSReader(const fs::path& p, FSReader::QueueTrigger t, bool recurse);
 

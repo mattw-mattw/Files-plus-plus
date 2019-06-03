@@ -31,7 +31,7 @@ void ReportError(const std::string& message, const m::MegaError* e)
 
 void AddMEGAAccount()
 {
-	auto [masp, path] = g_mega->makeTempAccount();
+	MEGA::Account acc = g_mega->makeTempAccount();
 
 	UserPassDialog dlg;
 	for (;;)
@@ -39,13 +39,13 @@ void AddMEGAAccount()
 		if (IDOK == dlg.DoModal())
 		{
 			bool done = false, success = false;
-			masp->login(CT2CA(dlg.name), CT2CA(dlg.password), new OneTimeListener([&](m::MegaRequest*, m::MegaError* e) { success = e->getErrorCode() == m::MegaError::API_OK; done = true;  }));
+			acc.masp->login(CT2CA(dlg.name), CT2CA(dlg.password), new OneTimeListener([&](m::MegaRequest*, m::MegaError* e) { success = e->getErrorCode() == m::MegaError::API_OK; done = true;  }));
 			while (!done) Sleep(100);
 			if (success)
 			{
-				g_mega->add(masp, path);
+				g_mega->add(acc);
 				AfxMessageBox(_T("Login succeeded"));
-				g_mega->onLogin(nullptr, masp);
+				g_mega->onLogin(nullptr, acc.masp);
 				return;
 			}
 			AfxMessageBox(_T("Login failed"));
@@ -54,7 +54,7 @@ void AddMEGAAccount()
 		else break;
 	}
 	std::error_code ec;
-	fs::remove_all(path, ec);
+	fs::remove_all(acc.cacheFolder, ec);
 }
 
 unique_ptr<FSReader> NewLocalFSReader(const fs::path& localPath, FSReader::QueueTrigger t, bool recurse)
@@ -64,14 +64,16 @@ unique_ptr<FSReader> NewLocalFSReader(const fs::path& localPath, FSReader::Queue
 
 bool LocalUserCrypt(string& data, bool encrypt)
 {
-	char buf[1000];
-	DATA_BLOB out{ sizeof(buf), (BYTE*)buf };
+	DATA_BLOB out{ 0, nullptr };
 	DATA_BLOB in{ DWORD(data.size()), (BYTE*)data.data() };
 	DATA_BLOB entropy{ 7, (BYTE*)"Files++" };
-	data.clear();
 	bool success = encrypt ?
-		CryptProtectData(&in, nullptr, &entropy, nullptr, nullptr, 0, &out) :
-		CryptUnprotectData(&in, nullptr, &entropy, nullptr, nullptr, 0, &out);
-	if (success) data.assign(buf, out.cbData);
+		CryptProtectData(&in, nullptr, nullptr, nullptr, nullptr, 0, &out) :
+		CryptUnprotectData(&in, nullptr, nullptr, nullptr, nullptr, 0, &out);
+	if (success)
+	{
+		data.assign((char*)out.pbData, out.cbData);
+		LocalFree(out.pbData);
+	}
 	return success;
 }

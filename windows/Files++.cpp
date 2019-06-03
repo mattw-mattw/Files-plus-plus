@@ -39,6 +39,8 @@ CFilesPPApp theApp;
 
 BOOL CFilesPPApp::InitInstance()
 {
+	//_crtBreakAlloc = 506;
+
 	// InitCommonControlsEx() is required on Windows XP if an application
 	// manifest specifies use of ComCtl32.dll version 6 or later to enable
 	// visual styles.  Otherwise, any window creation will fail.
@@ -79,7 +81,7 @@ BOOL CFilesPPApp::InitInstance()
 
 	std::mutex m;
 	std::unique_lock g(m);
-	CFilesPPDlg::shutdown_cv.wait(g, []() { return !CFilesPPDlg::atomicInstances; });
+	CFilesPPDlg::shutdown_cv.wait(g, []() { return CFilesPPDlg::atomicExitOk > 0; });
 
 	// Delete the shell manager created above.
 	if (pShellManager != nullptr)
