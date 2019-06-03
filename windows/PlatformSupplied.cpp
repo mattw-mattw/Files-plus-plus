@@ -4,6 +4,7 @@
 #include "../core/PlatformSupplied.h"
 #include "UserPassDialog.h"
 #include "LocalFSReader.h"
+#include <wincrypt.h>
 
 using namespace std;
 
@@ -22,9 +23,9 @@ fs::path BasePath()
 }
 
 
-void ReportError(const std::string& message, const m::MegaError& e)
+void ReportError(const std::string& message, const m::MegaError* e)
 {
-	AfxMessageBox(CA2CT((message + e.getErrorString() + " (" + to_string(e.getErrorCode()) + ")").c_str()));
+	AfxMessageBox(CA2CT((message + (e ? string(e->getErrorString()) + " (" + to_string(e->getErrorCode()) + ")" : string())).c_str()));
 }
 
 
@@ -44,7 +45,7 @@ void AddMEGAAccount()
 			{
 				g_mega->add(masp, path);
 				AfxMessageBox(_T("Login succeeded"));
-				g_mega->onLogin(m::MegaError(0), masp);
+				g_mega->onLogin(nullptr, masp);
 				return;
 			}
 			AfxMessageBox(_T("Login failed"));
@@ -59,4 +60,18 @@ void AddMEGAAccount()
 unique_ptr<FSReader> NewLocalFSReader(const fs::path& localPath, FSReader::QueueTrigger t, bool recurse)
 {
 	return make_unique<LocalFSReader>(localPath, t, recurse);
+}
+
+bool LocalUserCrypt(string& data, bool encrypt)
+{
+	char buf[1000];
+	DATA_BLOB out{ sizeof(buf), (BYTE*)buf };
+	DATA_BLOB in{ DWORD(data.size()), (BYTE*)data.data() };
+	DATA_BLOB entropy{ 7, (BYTE*)"Files++" };
+	data.clear();
+	bool success = encrypt ?
+		CryptProtectData(&in, nullptr, &entropy, nullptr, nullptr, 0, &out) :
+		CryptUnprotectData(&in, nullptr, &entropy, nullptr, nullptr, 0, &out);
+	if (success) data.assign(buf, out.cbData);
+	return success;
 }

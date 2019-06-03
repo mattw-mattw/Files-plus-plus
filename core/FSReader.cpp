@@ -1,6 +1,7 @@
 // Copyright 2019 The Files++ Authors.  Licence via 2-Clause BSD, see the LICENSE file.
 
 #include "FSReader.h"
+#include "PlatformSupplied.h"
 
 using namespace std;
 
@@ -50,12 +51,10 @@ void TopShelfReader::Threaded()
 	Send();
 }
 
-//void TopShelfReader::AddMenuItems(CMenu& m, int& id, map<int, std::function<void()>>& me)
-//{
-//	m.AppendMenu(MF_SEPARATOR, id++, LPCTSTR(nullptr));
-//
-//	m.AppendMenu(MF_STRING, id, _T("Add MEGA Account"));
-//	me[id] = [this]() { AddMEGAAccount();  };
-//	++id;
-//}
-//
+auto TopShelfReader::GetMenuActions() -> MenuActions 
+{
+	MenuActions ma;
+	ma.emplace_back("Add MEGA Account", []() { AddMEGAAccount(); });
+	return ma;
+};
+

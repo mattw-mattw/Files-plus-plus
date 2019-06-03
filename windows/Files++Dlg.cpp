@@ -536,7 +536,7 @@ LRESULT CFilesPPDlg::OnContentUpdate(WPARAM wParam, LPARAM lParam)
 		case FSReader::RENAMEDFROM:
 			sort_match_removeintersection(items, entry.batch, m_pathCtl.metaPath.nodeCompare());
 			remove_if_absent(m_contentCtl.filteredItems, items);
-			m_contentCtl.SetItemCount(m_contentCtl.filteredItems.size());
+			m_contentCtl.SetItemCount(int(m_contentCtl.filteredItems.size()));
 			break;
 
 		case FSReader::FILE_ACTION_APP_ERROR:
@@ -774,7 +774,7 @@ Filter::Filter(const FilterDlg::Settings& filterSettings, CFilesPPDlg& d) : dlg(
 	if (!filterSettings.regularexpression)
 	{
 		// convert non-re to re
-		for (int i = exp.size(); i--; )
+		for (size_t i = exp.size(); i--; )
 		{
 			if (exp[i] == '?') exp[i] = '.';
 			else if (exp[i] == '*') exp.replace(i, 1, ".*");
@@ -801,7 +801,7 @@ void Filter::FilterNewItems(std::deque<std::unique_ptr<Item>>& items)
 		if (p->isFolder()) ++folders;
 		else ++files, size += p->size();
 	}
-	dlg.m_contentCtl.SetItemCount(dlg.m_contentCtl.filteredItems.size());
+	dlg.m_contentCtl.SetItemCount(int(dlg.m_contentCtl.filteredItems.size()));
 }
 
 void Filter::FilterNewItems(std::vector<std::unique_ptr<Item>>& items)
@@ -818,7 +818,7 @@ void Filter::FilterNewItems(std::vector<std::unique_ptr<Item>>& items)
 		if (p->isFolder()) ++folders;
 		else ++files, size += p->size();
 	}
-	dlg.m_contentCtl.SetItemCount(dlg.m_contentCtl.filteredItems.size());
+	dlg.m_contentCtl.SetItemCount(int(dlg.m_contentCtl.filteredItems.size()));
 }
 
 void Filter::ApplyStatus()
@@ -914,18 +914,25 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 
 		map<int, std::function<void()>> menuexec;
 
-		if (activeReader)
+		FSReader::MenuActions ma;
+		if (activeReader) ma = activeReader->GetMenuActions();
+		if (!ma.empty())
 		{
-			int menuid = MENU_SUBSEQUENT;
-			//activeReader->AddMenuItems(contextMenu, menuid, menuexec);
-		}
+			contextMenu.AppendMenu(MF_SEPARATOR);
 
+			int id = MENU_SUBSEQUENT;
+			for (auto& entry : ma)
+			{
+				contextMenu.AppendMenu(MF_STRING, id++, CA2CT(entry.first.c_str()));
+			}
+		}
 		ClientToScreen(&pNMItemActivate->ptAction);
 		auto result = contextMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RIGHTBUTTON | TPM_NOANIMATION | TPM_RETURNCMD, pNMItemActivate->ptAction.x, pNMItemActivate->ptAction.y, this);
 		
 		if (result >= MENU_SUBSEQUENT)
 		{
-			if (activeReader && menuexec[result]) menuexec[result]();
+			unsigned n = result - MENU_SUBSEQUENT;
+			if (n < ma.size()) ma[n].second();
 		}
 		else
 		{

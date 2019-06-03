@@ -21,7 +21,8 @@ struct FSReader
 	struct Entry { Action action; Batch batch; };
 	NotifyQueue<Entry> q;
 
-	// todo: convert to getter virtual void AddMenuItems(CMenu& m, int& id, std::map<int, std::function<void()>>& me) {}
+	typedef std::vector<std::pair<std::string, std::function<void()>>> MenuActions;
+	virtual MenuActions GetMenuActions() { return MenuActions(); }
 
 protected:
 	bool recurse = false;
@@ -40,7 +41,7 @@ struct TopShelfReader : public FSReader
 	TopShelfReader(QueueTrigger t, bool r);
 	~TopShelfReader();
 
-	//void AddMenuItems(CMenu& m, int& id, std::map<int, std::function<void()>>& me) override;
+	MenuActions GetMenuActions() override;
 
 private:
 	void Threaded();

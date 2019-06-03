@@ -26,7 +26,7 @@ public:
 	std::pair<std::shared_ptr<m::MegaApi>, std::filesystem::path> makeTempAccount();
 	void add(std::shared_ptr<m::MegaApi> p, std::filesystem::path path);
 
-	void onLogin(const m::MegaError& e, const std::shared_ptr<m::MegaApi>& masp);
+	void onLogin(const m::MegaError* e, const std::shared_ptr<m::MegaApi>& masp);
 };
 
 extern MEGA* g_mega;
