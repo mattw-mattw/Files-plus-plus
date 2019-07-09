@@ -755,7 +755,8 @@ void CFilesPPDlg::OnLvnGetdispinfoList2(NMHDR *pNMHDR, LRESULT *pResult)
 		switch (pItem->iSubItem)
 		{
 		case 0: //fill in main text
-			wcscpy_s(pItem->pszText, pItem->cchTextMax, CString(CA2CT(m_contentCtl.filteredItems[iItem]->u8Name.c_str())) + (m_contentCtl.filteredItems[iItem]->isFolder() ? _T("\\") : _T("")));
+            wcscpy_s(pItem->pszText, pItem->cchTextMax, CString(CA2CT(m_contentCtl.filteredItems[iItem]->u8Name.c_str())));
+            if (m_contentCtl.filteredItems[iItem]->isFolder()) wcscat_s(pItem->pszText, pItem->cchTextMax, m_contentCtl.filteredItems[iItem]->isMegaPath() ? _T("/") : _T("\\"));
 			break;
 		case 1: //fill in sub item 1 text
 			if (!m_contentCtl.filteredItems[iItem]->isFolder() || m_contentCtl.filteredItems[iItem]->size() >= 0)

@@ -89,6 +89,7 @@ struct MegaFSReader : public FSReader
 
 private:
 	void Threaded();
+    void RecursiveRead(m::MegaNode& mnode, const std::string& basepath);
 
 	NodeUpdateListener listener;
 	std::shared_ptr<m::MegaApi> masp;

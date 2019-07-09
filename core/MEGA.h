@@ -6,6 +6,8 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <atomic>
+#include <condition_variable>
 
 #include "basictypes.h"
 
@@ -23,21 +25,42 @@ struct MEGA
 		Account(const std::filesystem::path& p, ApiPtr ap) : cacheFolder(p), masp(ap) {}
 	};
 
+    struct Folder : Account
+    {
+        std::string folderLink;
+        Folder(const std::string& link, const std::filesystem::path& p, ApiPtr ap) : Account(p, ap), folderLink(link) {}
+        ~Folder() {}
+    };
+
+    typedef std::shared_ptr<Account> AccountPtr;
+    typedef std::shared_ptr<Folder> FolderPtr;
+
+
 	MEGA();
 	~MEGA();
 
-	std::vector<ApiPtr> accounts() { std::vector<ApiPtr> v; std::lock_guard g(m); for (auto& a : megaAccounts) v.push_back(a.masp); return v; }
+    std::vector<AccountPtr> accounts() { std::lock_guard g(m); return megaAccounts; }
+    std::vector<FolderPtr> folderLinks() { std::lock_guard g(m); return megaFolderLinks; }
 
-	Account makeTempAccount();
-	void add(const Account&);
-	void logoutremove(ApiPtr masp);
+    std::atomic<int> accountsUpdateCount = 0;
+    std::atomic<int> folderLinksUpdateCount = 0;
+
+    std::condition_variable updateCV;
+    std::mutex updateCVMutex;
+
+    AccountPtr makeTempAccount();
+    FolderPtr makeTempFolder();
+    void addAccount(AccountPtr&);
+    void addFolder(FolderPtr&);
+    void logoutremove(ApiPtr masp);
 	void deletecache(ApiPtr masp);
 
 	void onLogin(const m::MegaError* e, const std::shared_ptr<m::MegaApi>& masp);
 
 private:
 	std::mutex m;
-	std::vector<Account> megaAccounts;
+	std::vector<AccountPtr> megaAccounts;
+    std::vector<FolderPtr> megaFolderLinks;
 };
 
 extern MEGA* g_mega;

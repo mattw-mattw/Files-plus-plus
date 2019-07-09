@@ -31,18 +31,11 @@ if (WIN32)
 			windows/PlatformSupplied.cpp
 	)
 	target_link_libraries("Files++" PUBLIC uafxcwd.lib Mega)
-	#target_link_libraries("Files++" PUBLIC -manifest:embed -manifestinput:"${PROJECT_SOURCE_DIR}/windows/myapp.manifest" )
 
 	set_target_properties("Files++"  PROPERTIES
 		COMPILE_DEFINITIONS _UNICODE,UNICODE,_BIND_TO_CURRENT_CRT_VERSION,_BIND_TO_CURRENT_MFC_VERSION
-		LINK_FLAGS "/ENTRY:\"wWinMainCRTStartup\"")
-
-	#ADD_CUSTOM_COMMAND(
-#		TARGET Files++
-#		POST_BUILD 
-#		COMMAND "mt.exe" -manifest \"${CMAKE_CURRENT_SOURCE_DIR}/windows/Files++.exe.manifest\" -inputresource:\"$<TARGET_FILE:Files++>\"\;\#1  -outputresource:\"$<TARGET_FILE:Files++>\"\;\#1 -validate_manifest -verbose
-#		COMMENT "Adding display aware manifest!" 
-#	)
+		LINK_FLAGS "/ENTRY:\"wWinMainCRTStartup\""
+		VS_DPI_AWARE "PerMonitorHighDPIAware")
 
 endif(WIN32)
 

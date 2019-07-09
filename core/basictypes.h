@@ -48,3 +48,5 @@ public:
 		return true;
 	}
 };
+
+using OwnStr = std::unique_ptr<char[]>;

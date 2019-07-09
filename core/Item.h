@@ -15,6 +15,7 @@ struct Item
 	Item() {}
 	virtual ~Item() {}
 	virtual bool isFolder() const { return true; }
+    virtual bool isMegaPath() const { return true; }
 	virtual int64_t size() const { return -1; }
 };
 
@@ -24,6 +25,7 @@ struct ItemLocalFS : public Item
 	bool folder;
 	ItemLocalFS(std::string n, int64_t s, bool f) : Item(move(n)), filesize(s), folder(f) {}
 	bool isFolder() const override { return folder; }
+    bool isMegaPath() const{ return false; }
 	int64_t size() const override { return filesize; }
 };
 
@@ -35,13 +37,13 @@ struct ItemError : public Item
 
 struct ItemMegaAccount : public Item
 {
-	ItemMegaAccount(std::string n, std::shared_ptr<m::MegaApi> p) : Item(std::move(n)), masp(p) {}
-	std::shared_ptr<m::MegaApi> masp;
+    ItemMegaAccount(std::string n, std::shared_ptr<m::MegaApi> p) : Item(std::move(n)), masp(p) {}
+    std::shared_ptr<m::MegaApi> masp;
 };
 
 struct ItemMegaNode : public Item
 {
-	ItemMegaNode(std::unique_ptr<m::MegaNode> n) : Item(n->getName()), mnode(std::move(n)) {}
+	ItemMegaNode(std::string name, std::unique_ptr<m::MegaNode> n) : Item(move(name)), mnode(std::move(n)) {}
 	std::unique_ptr<m::MegaNode> mnode;
 	bool isFolder() const override { return mnode->isFolder(); }
 	int64_t size() const override { return isFolder() ? -1 : mnode->getSize(); }

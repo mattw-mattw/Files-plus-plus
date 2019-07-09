@@ -31,7 +31,7 @@ void ReportError(const std::string& message, const m::MegaError* e)
 
 void AddMEGAAccount()
 {
-	MEGA::Account acc = g_mega->makeTempAccount();
+	MEGA::AccountPtr acc = g_mega->makeTempAccount();
 
 	UserPassDialog dlg;
 	for (;;)
@@ -39,13 +39,13 @@ void AddMEGAAccount()
 		if (IDOK == dlg.DoModal())
 		{
 			bool done = false, success = false;
-			acc.masp->login(CT2CA(dlg.name), CT2CA(dlg.password), new OneTimeListener([&](m::MegaRequest*, m::MegaError* e) { success = e->getErrorCode() == m::MegaError::API_OK; done = true;  }));
+			acc->masp->login(CT2CA(dlg.name), CT2CA(dlg.password), new OneTimeListener([&](m::MegaRequest*, m::MegaError* e) { success = e->getErrorCode() == m::MegaError::API_OK; done = true;  }));
 			while (!done) Sleep(100);
 			if (success)
 			{
-				g_mega->add(acc);
+				g_mega->addAccount(acc);
 				AfxMessageBox(_T("Login succeeded"));
-				g_mega->onLogin(nullptr, acc.masp);
+				g_mega->onLogin(nullptr, acc->masp);
 				return;
 			}
 			AfxMessageBox(_T("Login failed"));
@@ -54,8 +54,38 @@ void AddMEGAAccount()
 		else break;
 	}
 	std::error_code ec;
-	fs::remove_all(acc.cacheFolder, ec);
+	fs::remove_all(acc->cacheFolder, ec);
 }
+
+void AddMEGAFolderLink()
+{
+    MEGA::FolderPtr acc = g_mega->makeTempFolder();
+
+    UserPassDialog dlg;
+    for (;;)
+    {
+        if (IDOK == dlg.DoModal())
+        {
+            bool done = false, success = false;
+            acc->masp->loginToFolder(CT2CA(dlg.name), new OneTimeListener([&](m::MegaRequest*, m::MegaError* e) { success = e->getErrorCode() == m::MegaError::API_OK; done = true;  }));
+            while (!done) Sleep(100);
+            if (success)
+            {
+                acc->folderLink = CT2CA(dlg.name);
+                g_mega->addFolder(acc);
+                AfxMessageBox(_T("Opened Folder Ok"));
+                g_mega->onLogin(nullptr, acc->masp);
+                return;
+            }
+            AfxMessageBox(_T("Folder link failed to open"));
+            continue;
+        }
+        else break;
+    }
+    std::error_code ec;
+    fs::remove_all(acc->cacheFolder, ec);
+}
+
 
 unique_ptr<FSReader> NewLocalFSReader(const fs::path& localPath, FSReader::QueueTrigger t, bool recurse)
 {
