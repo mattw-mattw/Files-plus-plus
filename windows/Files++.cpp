@@ -37,8 +37,26 @@ CFilesPPApp theApp;
 
 // CFilesPPApp initialization
 
+
+#include <mega/logging.h>
+
+class MegaCLILogger : public m::Logger {
+public:
+    void log(const char* time, int loglevel, const char* source, const char* message) override
+    {
+        OutputDebugStringA(message);
+        OutputDebugStringA("\r\n");
+    }
+};
+
+MegaCLILogger logger;
+
+
 BOOL CFilesPPApp::InitInstance()
 {
+    m::SimpleLogger::setLogLevel(m::logMax);
+    m::SimpleLogger::setOutputClass(&logger);
+
 	//_crtBreakAlloc = 506;
 
 	// InitCommonControlsEx() is required on Windows XP if an application
