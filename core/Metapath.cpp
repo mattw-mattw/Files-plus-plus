@@ -127,6 +127,17 @@ bool MetaPath::GetLocalPath(std::filesystem::path& p) const
 	return false;
 }
 
+string MetaPath::GetFullPath(Item& item)
+{
+    string s;
+    switch (pathType)
+    {
+    case LocalFS: s = (localPath / fs::u8path(item.u8Name)).u8string(); break;
+    case MegaFS: if (auto p = dynamic_cast<ItemMegaNode*>(&item)) s = masp->getNodePath(p->mnode.get());  break;
+    }
+    return s;
+}
+
 unique_ptr<FSReader> MetaPath::GetContentReader(FSReader::QueueTrigger t, bool recurse) const
 {
 	switch (pathType)

@@ -24,6 +24,8 @@ struct FSReader
 	typedef std::vector<std::pair<std::string, std::function<void()>>> MenuActions;
 	virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) { return MenuActions(); }
 
+    virtual void OnDragDroppedItems(const std::deque<std::filesystem::path>& paths);
+
 protected:
 	bool recurse = false;
 
@@ -90,6 +92,7 @@ struct MegaFSReader : public FSReader
 private:
 	void Threaded();
     void RecursiveRead(m::MegaNode& mnode, const std::string& basepath);
+    void OnDragDroppedItems(const std::deque<std::filesystem::path>& paths) override;
 
 	NodeUpdateListener listener;
 	std::shared_ptr<m::MegaApi> masp;

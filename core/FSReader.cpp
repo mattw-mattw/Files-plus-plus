@@ -7,36 +7,41 @@ using namespace std;
 
 void FSReader::Send()
 {
-	if (!currentitems.empty())
-	{
-		q.push(Entry{ currentaction, move(currentitems) });
-		currentitems.clear();
-		if (trigger) trigger();
-	}
-	currentaction = INVALID_ACTION;
+    if (!currentitems.empty())
+    {
+        q.push(Entry{ currentaction, move(currentitems) });
+        currentitems.clear();
+        if (trigger) trigger();
+    }
+    currentaction = INVALID_ACTION;
 }
 
 void FSReader::Queue(Action action, unique_ptr<Item>&& p)
 {
-	if (currentitems.size() >= 100 || (currentaction != action && !(action == RENAMEDFROM && currentaction == RENAMEDFROM)))
-	{
-		Send();
-	}
-	currentaction = action;
-	currentitems.emplace_back(move(p));
+    if (currentitems.size() >= 100 || (currentaction != action && !(action == RENAMEDFROM && currentaction == RENAMEDFROM)))
+    {
+        Send();
+    }
+    currentaction = action;
+    currentitems.emplace_back(move(p));
+}
+
+void FSReader::OnDragDroppedItems(const std::deque<std::filesystem::path>&)
+{
+    ReportError("This view can't accept files, sorry");
 }
 
 TopShelfReader::TopShelfReader(QueueTrigger t, bool r)
-	: FSReader(t, r)
-	, workerthread([this]() { Threaded(); })
+    : FSReader(t, r)
+    , workerthread([this]() { Threaded(); })
 {
 }
 
 TopShelfReader::~TopShelfReader()
 {
-	cancelling = true;
+    cancelling = true;
     g_mega->updateCV.notify_all();
-	workerthread.join();
+    workerthread.join();
 }
 
 void TopShelfReader::Threaded()
@@ -93,76 +98,85 @@ bool checkProAccount()
 
 auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
 {
-	MenuActions ma;
-	if (selectedItems->size() == 1)
-	{
-		if (auto account = dynamic_cast<ItemMegaAccount*>((*selectedItems)[0]))
-		{
-			ma.emplace_back("Log Out and remove local cache", [masp = account->masp]() { g_mega->logoutremove(masp); });
-		}
-	}
-	else if (selectedItems->empty())
-	{
+    MenuActions ma;
+    if (selectedItems->size() == 1)
+    {
+        if (auto account = dynamic_cast<ItemMegaAccount*>((*selectedItems)[0]))
+        {
+            ma.emplace_back("Log Out and remove local cache", [masp = account->masp]() { g_mega->logoutremove(masp); });
+        }
+    }
+    else if (selectedItems->empty())
+    {
         ma.emplace_back("Add MEGA Account", []() { if (checkProAccount()) AddMEGAAccount(); else ReportError("Please load a PRO/Business account first"); });
         ma.emplace_back("Add MEGA Folder Link", []() { AddMEGAFolderLink(); });
-	}
-	return ma;
+    }
+    return ma;
 };
 
 MegaAccountReader::MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r)
-	: FSReader(t, r)
-	, masp(p)
-	, workerthread([this]() { Threaded(); })
+    : FSReader(t, r)
+    , masp(p)
+    , workerthread([this]() { Threaded(); })
 {
 }
 
 MegaAccountReader::~MegaAccountReader()
 {
-	cancelling = true;
-	workerthread.join();
+    cancelling = true;
+    workerthread.join();
 }
 
 auto MegaAccountReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) -> MenuActions
 {
-	return MenuActions();
+    return MenuActions();
 }
 
 void MegaAccountReader::Threaded()
 {
-	unique_ptr<m::MegaNode> root(masp->getRootNode());
-	unique_ptr<m::MegaNode> inbox(masp->getInboxNode());
-	unique_ptr<m::MegaNode> rubbish(masp->getRubbishNode());
+    unique_ptr<m::MegaNode> root(masp->getRootNode());
+    unique_ptr<m::MegaNode> inbox(masp->getInboxNode());
+    unique_ptr<m::MegaNode> rubbish(masp->getRubbishNode());
 
-	if (root) Queue(NEWITEM, make_unique<ItemMegaNode>(root->getName(), move(root)));
-	if (inbox) Queue(NEWITEM, make_unique<ItemMegaNode>(inbox->getName(), move(inbox)));
-	if (rubbish) Queue(NEWITEM, make_unique<ItemMegaNode>(rubbish->getName(), move(rubbish)));
+    if (root) Queue(NEWITEM, make_unique<ItemMegaNode>(root->getName(), move(root)));
+    if (inbox) Queue(NEWITEM, make_unique<ItemMegaNode>(inbox->getName(), move(inbox)));
+    if (rubbish) Queue(NEWITEM, make_unique<ItemMegaNode>(rubbish->getName(), move(rubbish)));
 
-	unique_ptr<m::MegaNodeList> inshares(masp->getInShares());
-	if (inshares)
-	{
-		for (int i = 0; i < inshares->size(); ++i)
-		{
-			Queue(NEWITEM, make_unique<ItemMegaInshare>(std::unique_ptr<m::MegaNode>(inshares->get(i)->copy()), *masp, -1, true));
-		}
-	}
+    unique_ptr<m::MegaNodeList> inshares(masp->getInShares());
+    if (inshares)
+    {
+        for (int i = 0; i < inshares->size(); ++i)
+        {
+            Queue(NEWITEM, make_unique<ItemMegaInshare>(std::unique_ptr<m::MegaNode>(inshares->get(i)->copy()), *masp, -1, true));
+        }
+    }
 
-	Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-	Send();
+    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    Send();
 }
 
 MegaFSReader::MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r)
-	: FSReader(t, r)
-	, masp(p)
-	, mnode(move(n))
-	, workerthread([this]() { Threaded(); })
+    : FSReader(t, r)
+    , masp(p)
+    , mnode(move(n))
+    , workerthread([this]() { Threaded(); })
 {
 }
 
 MegaFSReader::~MegaFSReader()
 {
-	cancelling = true;
-	listener.nq.push(nullptr);
-	workerthread.join();
+    cancelling = true;
+    listener.nq.push(nullptr);
+    workerthread.join();
+}
+
+void MegaFSReader::OnDragDroppedItems(const std::deque<std::filesystem::path>& paths)
+{
+    for (auto p : paths)
+    {
+        masp->startUpload(p.u8string().c_str(), mnode.get());
+    }
+    ReportError("Queued " + to_string(paths.size()) + " paths for upload");
 }
 
 string removebase(OwnStr& path, const string& basepath)
@@ -212,59 +226,59 @@ bool hasAncestor(std::unique_ptr<m::MegaNode> n, m::MegaNode* ancestor, m::MegaA
 
 void MegaFSReader::Threaded()
 {
-	masp->addGlobalListener(&listener);
+    masp->addGlobalListener(&listener);
 
-	for (;;)
-	{
-		bool reload_needed = false;
+    for (;;)
+    {
+        bool reload_needed = false;
         OwnStr basepathptr(masp->getNodePath(mnode.get()));
         string basepath(basepathptr.get());
         if (basepath == "/") basepath = "";
         RecursiveRead(*mnode, basepath);
-		Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-		Send();
+        Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+        Send();
 
-		while (!cancelling && !reload_needed)
-		{
-			unique_ptr<m::MegaNodeList> nodes;
-			if (listener.nq.pop(nodes))
-			{
-				if (cancelling) break;
-				if (!nodes)
-				{
-					// MEGA callback says to reload, due to too many changes
-					Queue(FILE_ACTION_APP_READRESTARTED, NULL);
-					reload_needed = true;
-					break;
-				}
-				for (int i = 0; i < nodes->size(); ++i)
-				{
-					auto n = nodes->get(i);
-					if ((recurse && hasAncestor(unique_ptr<m::MegaNode>(n->copy()), mnode.get(), masp.get()) || 
-                        !recurse && n->getParentHandle() == mnode->getHandle()) 
-                        && n->isFolder() || n->isFile())
-					{
+        while (!cancelling && !reload_needed)
+        {
+            unique_ptr<m::MegaNodeList> nodes;
+            if (listener.nq.pop(nodes))
+            {
+                if (cancelling) break;
+                if (!nodes)
+                {
+                    // MEGA callback says to reload, due to too many changes
+                    Queue(FILE_ACTION_APP_READRESTARTED, NULL);
+                    reload_needed = true;
+                    break;
+                }
+                for (int i = 0; i < nodes->size(); ++i)
+                {
+                    auto n = nodes->get(i);
+                    if ((n->isFolder() || n->isFile()) && (
+                        recurse && hasAncestor(unique_ptr<m::MegaNode>(n->copy()), mnode.get(), masp.get()) ||
+                        !recurse && n->getParentHandle() == mnode->getHandle()))
+                    {
                         OwnStr path(masp->getNodePath(n));
                         string name(removebase(path, basepath));
-						if (n->hasChanged(m::MegaNode::CHANGE_TYPE_REMOVED))
-						{
-							Queue(DELETEDITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
-						}
-						else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_NEW))
-						{
-							Queue(NEWITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
-						}
-						else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_ATTRIBUTES)) // could be renamed
-						{
-							Queue(DELETEDITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
-							Queue(NEWITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
-						}
-					}
-				}
-				Send();
-			}
-		}
-		if (!reload_needed) break;
-	}
-	masp->removeGlobalListener(&listener);
+                        if (n->hasChanged(m::MegaNode::CHANGE_TYPE_REMOVED))
+                        {
+                            Queue(DELETEDITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                        }
+                        else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_NEW))
+                        {
+                            Queue(NEWITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                        }
+                        else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_ATTRIBUTES)) // could be renamed
+                        {
+                            Queue(DELETEDITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                            Queue(NEWITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                        }
+                    }
+                }
+                Send();
+            }
+        }
+        if (!reload_needed) break;
+    }
+    masp->removeGlobalListener(&listener);
 }

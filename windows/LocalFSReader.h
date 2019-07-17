@@ -13,6 +13,7 @@ class LocalFSReader : public FSReader
 	OVERLAPPED0 overlapped;
 	std::string overlappedbuf;
 	bool cancelling = false;
+    HWND hwnd= 0;
 
 public:
 	std::filesystem::path dir;

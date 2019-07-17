@@ -21,16 +21,21 @@
 #include "LocalFSReader.h"
 #include "FilterDlg.h"
 
+class CFilesPPDlg;
+
+
 class ItemListCtrl : public CMFCListCtrl
 {
+    DECLARE_DYNAMIC(ItemListCtrl);
+    DECLARE_MESSAGE_MAP()
+    void OnDropFiles(HDROP hDropInfo);
+    CFilesPPDlg& dlg;
+
 public:
-	std::vector<Item*> filteredItems;
+    ItemListCtrl(CFilesPPDlg& d) : dlg(d) {}
+    std::vector<Item*> filteredItems;
 	void Sort(int iColumn, BOOL bAscending, BOOL bAdd ) override;
 };
-
-
-
-class CFilesPPDlg;
 
 class Filter
 {
@@ -71,7 +76,6 @@ public:
 	bool NavigateForward();
 };
 
-
 class CFilesPPDlg : public CDialogEx
 {
 	DECLARE_DYNAMIC(CFilesPPDlg);
@@ -91,7 +95,7 @@ public:
 	protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV support
 
-	void LoadContent(bool reestFilter);
+	void LoadContent(bool resetFilter);
 	LRESULT OnContentUpdate(WPARAM wParam, LPARAM lParam);
 	void ContentEstablished();
 

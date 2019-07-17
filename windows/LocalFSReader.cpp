@@ -60,10 +60,47 @@ LocalFSReader::~LocalFSReader()
 	workerthread.join();
 }
 
+void ExploreTo(HWND hwnd, const fs::path& p)
+{
+    wstring s = L"\"" + p.wstring() + L"\"";
+    wstring params;
+    error_code e;
+    if (!fs::is_directory(p, e))
+    {
+        s = L"/select," + s;
+        ShellExecuteW(hwnd, NULL, L"c:\\Windows\\explorer.exe", s.c_str(), NULL, SW_SHOWNORMAL);
+        return;
+    }
+
+    SHELLEXECUTEINFOW sei;
+    memset(&sei, 0, sizeof(sei));
+    sei.cbSize = sizeof(sei);
+    sei.hwnd = hwnd;
+    sei.lpVerb = L"explore";
+    sei.lpFile = s.c_str();
+    sei.lpParameters = params.empty() ? NULL : params.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    ::ShellExecuteExW(&sei);
+}
+
+void ExploreProperties(HWND hwnd, const fs::path& p)
+{
+    wstring s = L"\"" + p.wstring() + L"\"";
+    SHELLEXECUTEINFOW sei;
+    memset(&sei, 0, sizeof(sei));
+    sei.cbSize = sizeof(sei);
+    sei.hwnd = hwnd;
+    sei.lpVerb = L"properties";
+    sei.lpFile = s.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    ::ShellExecuteExW(&sei);
+}
 
 auto LocalFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
 {
 	MenuActions ma;
+    ma.emplace_back("Explore To", [this, selectedItems]() { for (auto i : *selectedItems) ExploreTo(hwnd, dir / i->u8Name); });
+    ma.emplace_back("Explorer Properties", [this, selectedItems]() { for (auto i : *selectedItems) ExploreProperties(hwnd, dir / i->u8Name); });
 	return ma;
 }
 

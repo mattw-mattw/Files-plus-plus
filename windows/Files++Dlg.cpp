@@ -69,6 +69,16 @@ BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
 END_MESSAGE_MAP()
 
 
+IMPLEMENT_DYNAMIC(ItemListCtrl, CMFCListCtrl);
+BEGIN_MESSAGE_MAP(ItemListCtrl, CMFCListCtrl)
+    ON_WM_DROPFILES()
+END_MESSAGE_MAP()
+
+void ItemListCtrl::OnDropFiles(HDROP hDropInfo)
+{
+    dlg.OnDropFiles(hDropInfo);
+}
+
 void ItemListCtrl::Sort(int iColumn, BOOL bAscending, BOOL bAdd)
 {
 
@@ -99,6 +109,7 @@ IMPLEMENT_DYNAMIC(CFilesPPDlg, CDialogEx);
 
 CFilesPPDlg::CFilesPPDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_FILESPP_DIALOG, pParent)
+    , m_contentCtl(*this)
 {
 	if (!g_mega) g_mega = new MEGA;
 
@@ -172,11 +183,10 @@ BEGIN_MESSAGE_MAP(CFilesPPDlg, CDialogEx)
 END_MESSAGE_MAP()
 
 
+IMPLEMENT_DYNAMIC(PathCtrl, CEdit);
 BEGIN_MESSAGE_MAP(PathCtrl, CEdit)
 	ON_WM_DROPFILES()
 END_MESSAGE_MAP()
-
-IMPLEMENT_DYNAMIC(PathCtrl, CEdit);
 
 void PathCtrl::OnDropFiles(HDROP hDropInfo)
 {
@@ -617,20 +627,14 @@ void CFilesPPDlg::OnNMDblclkList2(NMHDR *pNMHDR, LRESULT *pResult)
 			// make a new top level window (complete with its own gui thread) to load subdir 
 
 			auto t = make_unique<CFilesPPDlgThread>();
-
-			fs::path p;
-			if (m_pathCtl.metaPath.GetLocalPath(p))
+            t->dlg.m_pathCtl.metaPath = m_pathCtl.metaPath;
+			if (t->dlg.m_pathCtl.metaPath.Descend(item))//string(CT2CA(s))))
 			{
-				t->dlg.m_pathCtl.metaPath.SetLocalPath(p);
-				if (t->dlg.m_pathCtl.metaPath.Descend(item))//string(CT2CA(s))))
-				{
-					t->m_bAutoDelete = true;
-					t->dlg.filterSettings = filterSettings;
-					GetWindowRect(t->dlg.originatorWindowRect);
-					BOOL b = t->CreateThread();
-					if (!b) AfxMessageBox(_T("Thread creation failed"));
-					else t.release();
-				}
+				t->m_bAutoDelete = true;
+				t->dlg.filterSettings = filterSettings;
+				GetWindowRect(t->dlg.originatorWindowRect);
+				if (!t->CreateThread()) AfxMessageBox(_T("Thread creation failed"));
+				else t.release();
 			}
 		}
 		else
@@ -771,47 +775,79 @@ void CFilesPPDlg::OnLvnGetdispinfoList2(NMHDR *pNMHDR, LRESULT *pResult)
 void CFilesPPDlg::OnDropFiles(HDROP hDropInfo)
 {
 	// TODO: Add your message handler code here and/or call default
+    int nCntFiles = DragQueryFile(hDropInfo, 0xFFFFFFFF, 0, 0);
 
-	CDialogEx::OnDropFiles(hDropInfo);
+    if (auto pLocalFSREader = dynamic_cast<LocalFSReader*>(activeReader.get()))
+    {
+        SHFILEOPSTRUCT s;
+        memset(&s, 0, sizeof(s));
+        s.hwnd = m_hWnd;
+        s.wFunc = FO_COPY;
+        s.fFlags = FOF_ALLOWUNDO;
+
+        std::wstring to, from;
+
+        for (int j = 0; j < nCntFiles; j++)
+        {
+            UINT bufsize = ::DragQueryFileW(hDropInfo, j, NULL, 0) + 1;
+            unique_ptr<wchar_t[]> buf(new wchar_t[bufsize]);
+
+            if (::DragQueryFileW(hDropInfo, j, buf.get(), bufsize))
+            {
+                buf[bufsize - 1] = 0;
+                fs::path p(buf.get());
+                error_code e;
+                auto s = fs::status(p, e);
+                if (!e && (fs::is_regular_file(s) || fs::is_directory(s)))
+                {
+                    from.append(buf.get());
+                    from.append(1, '\0');
+                }
+            }
+        }
+
+        std::filesystem::path activePath;
+        if (m_pathCtl.metaPath.GetLocalPath(activePath))
+        {
+            to.append(activePath.wstring());
+
+            from.append(2, '\0');
+            to.append(2, '\0');
+
+
+            s.pFrom = from.data();
+            s.pTo = to.data();
+
+            SHFileOperation(&s);
+        }
+    }
+    else
+    {
+        std::deque<fs::path> paths;
+
+        for (int j = 0; j < nCntFiles; j++)
+        {
+            UINT bufsize = ::DragQueryFileW(hDropInfo, j, NULL, 0) + 1;
+            unique_ptr<wchar_t[]> buf(new wchar_t[bufsize]);
+
+            if (::DragQueryFileW(hDropInfo, j, buf.get(), bufsize))
+            {
+                buf[bufsize - 1] = 0;
+                fs::path p(buf.get());
+                error_code e;
+                auto s = fs::status(p, e);
+                if (!e && (fs::is_regular_file(s) || fs::is_directory(s)))
+                {
+                    paths.push_back(p);
+                }
+            }
+        }
+
+        activeReader->OnDragDroppedItems(paths);
+    }
 }
 
-enum { MENU_COPYNAMES = 1, MENU_COPYPATHS, MENU_COPYNAMESQUOTED, MENU_COPYPATHSQUOTED, MENU_EXPLORETO, MENU_EXPLOREPROPERTIES, MENU_SUBSEQUENT };
-
-void ExploreTo(HWND hwnd, const fs::path& p)
-{
-	wstring s = L"\"" + p.wstring() + L"\"";
-	wstring params;
-	error_code e;
-	if (!fs::is_directory(p, e))
-	{
-		s = L"/select," + s; 
-		ShellExecuteW(hwnd, NULL, L"c:\\Windows\\explorer.exe", s.c_str(), NULL, SW_SHOWNORMAL);
-		return;
-	}
-
-	SHELLEXECUTEINFOW sei;
-	memset(&sei, 0, sizeof(sei));
-	sei.cbSize = sizeof(sei);
-	sei.hwnd = hwnd;
-	sei.lpVerb = L"explore";
-	sei.lpFile = s.c_str();
-	sei.lpParameters = params.empty() ? NULL : params.c_str();
-	sei.nShow = SW_SHOWNORMAL;
-	::ShellExecuteExW(&sei);
-}
-
-void ExploreProperties(HWND hwnd, const fs::path& p)
-{
-	wstring s = L"\"" + p.wstring() + L"\"";
-	SHELLEXECUTEINFOW sei;
-	memset(&sei, 0, sizeof(sei));
-	sei.cbSize = sizeof(sei);
-	sei.hwnd = hwnd;
-	sei.lpVerb = L"properties";
-	sei.lpFile = s.c_str();
-	sei.nShow = SW_SHOWNORMAL;
-	::ShellExecuteExW(&sei);
-}
+enum { MENU_COPYNAMES = 1, MENU_COPYPATHS, MENU_COPYNAMESQUOTED, MENU_COPYPATHSQUOTED, MENU_SUBSEQUENT };
 
 void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 {
@@ -837,8 +873,6 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 		contextMenu.AppendMenu(MF_STRING, MENU_COPYPATHS, _T("Copy Full Paths"));
 		contextMenu.AppendMenu(MF_STRING, MENU_COPYNAMESQUOTED, _T("Copy Names Quoted"));
 		contextMenu.AppendMenu(MF_STRING, MENU_COPYPATHSQUOTED, _T("Copy Full Paths Quoted"));
-		contextMenu.AppendMenu(MF_STRING, MENU_EXPLORETO, _T("Explore To"));
-		contextMenu.AppendMenu(MF_STRING, MENU_EXPLOREPROPERTIES, _T("Explorer Properties"));
 
 		map<int, std::function<void()>> menuexec;
 
@@ -864,27 +898,25 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 		}
 		else
 		{
-			CString copyString;
+			string copyString;
 			int lines = 0;
 
-			fs::path activePath;
-			if (m_pathCtl.metaPath.GetLocalPath(activePath))
+			for (auto& item : *selectedItems)
 			{
-				for (auto& item : *selectedItems)
-				{
-					fs::path fullpath = activePath / fs::u8path(item->u8Name);
+                string fullpath = m_pathCtl.metaPath.GetFullPath(*item);
 
-					switch (result)
-					{
-					case MENU_COPYNAMES: ++lines; copyString += (item->u8Name + "\r\n").c_str();  break;
-					case MENU_COPYPATHS: ++lines; copyString += (fullpath.u8string() + "\r\n").c_str(); break;
-					case MENU_COPYNAMESQUOTED: ++lines; copyString += ("\"" + item->u8Name + "\"\r\n").c_str();  break;
-					case MENU_COPYPATHSQUOTED: ++lines; copyString += ("\"" + fullpath.u8string() + "\"\r\n").c_str(); break;
-					case MENU_EXPLORETO: ExploreTo(m_hWnd, fullpath); break;
-					case MENU_EXPLOREPROPERTIES: ExploreProperties(m_hWnd, fullpath); break;
-					}
+				switch (result)
+				{
+				case MENU_COPYNAMES: ++lines; copyString += item->u8Name + "\r\n";  break;
+				case MENU_COPYPATHS: ++lines; copyString += fullpath + "\r\n"; break;
+				case MENU_COPYNAMESQUOTED: ++lines; copyString += "\"" + item->u8Name + "\"\r\n";  break;
+				case MENU_COPYPATHSQUOTED: ++lines; copyString += "\"" + fullpath + "\"\r\n"; break;
 				}
 			}
+
+            string u16string;
+            m::MegaApi::utf8ToUtf16(copyString.c_str(), &u16string);
+            u16string.append(2, '\0');
 
 			if (result == MENU_COPYNAMES || result == MENU_COPYPATHS || result == MENU_COPYNAMESQUOTED || result == MENU_COPYPATHSQUOTED)
 			{
@@ -895,13 +927,13 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 					{
 						if (EmptyClipboard())
 						{
-							auto len = copyString.GetLength() + 1;
+							auto len = u16string.size();
 							if (HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, len))
 							{
 								auto gptr = GlobalLock(hg);
-								memcpy(gptr, (LPCTSTR)copyString, len);
+								memcpy(gptr, u16string.data(), len);
 								GlobalUnlock(hg);
-								auto b = SetClipboardData(CF_TEXT, hg);
+								auto b = SetClipboardData(CF_UNICODETEXT, hg);
 								copySucceded = b == hg;
 							}
 						}

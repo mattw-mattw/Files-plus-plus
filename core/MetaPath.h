@@ -22,6 +22,8 @@ public:
 	void SetLocalPath(const std::filesystem::path& p);
 	bool GetLocalPath(std::filesystem::path& p) const;
 
+    std::string GetFullPath(Item&);
+
 	std::unique_ptr<FSReader> GetContentReader(FSReader::QueueTrigger t, bool recurse) const;
 
 	std::string u8DisplayPath() const;
