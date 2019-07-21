@@ -24,6 +24,11 @@ public:
 	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
 
 private:
+
+    void OnDragDroppedMEGAItems(MEGA::ApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
+    void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths) override;
+
+
 	bool RequestChanges();
 	bool ReadDir(const std::filesystem::path& p, bool recurse, const std::filesystem::path& recurseprefix);
 	void Threaded();

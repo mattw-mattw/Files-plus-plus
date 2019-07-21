@@ -60,6 +60,14 @@ MEGA::~MEGA()
     for (auto& a : megaFolderLinks) { a->masp->localLogout(); }
 }
 
+auto MEGA::findMegaApi(uint64_t dragdroptoken) -> ApiPtr
+{
+    std::lock_guard g(m);
+    for (auto& a : megaAccounts) { if (reinterpret_cast<uint64_t>(a->masp.get()) == dragdroptoken) return a->masp; }
+    for (auto& a : megaFolderLinks) { if (reinterpret_cast<uint64_t>(a->masp.get()) == dragdroptoken) return a->masp; }
+    return nullptr;
+}
+
 void MEGA::onLogin(const m::MegaError* e, const shared_ptr<m::MegaApi>& masp)
 {
 	if (e && e->getErrorCode())
@@ -138,7 +146,7 @@ void MEGA::addFolder(FolderPtr& a) {
     ReportError("Failed to encrypt or write folder link");
 }
 
-void MEGA::logoutremove(std::shared_ptr<m::MegaApi> masp)
+void MEGA::logoutremove(ApiPtr masp)
 {
 	if (masp->isLoggedIn())
 	{
@@ -153,7 +161,7 @@ void MEGA::logoutremove(std::shared_ptr<m::MegaApi> masp)
 	}
 }
 
-void MEGA::deletecache(std::shared_ptr<m::MegaApi> masp)
+void MEGA::deletecache(ApiPtr masp)
 {
 	std::lock_guard g(m);
     for (auto it = megaAccounts.begin(); it != megaAccounts.end(); ++it)

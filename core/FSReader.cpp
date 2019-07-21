@@ -26,7 +26,12 @@ void FSReader::Queue(Action action, unique_ptr<Item>&& p)
     currentitems.emplace_back(move(p));
 }
 
-void FSReader::OnDragDroppedItems(const std::deque<std::filesystem::path>&)
+void FSReader::OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths)
+{
+    ReportError("This view can't accept files, sorry");
+}
+
+void FSReader::OnDragDroppedMEGAItems(MEGA::ApiPtr masp, const deque<unique_ptr<m::MegaNode>>& nodes)
 {
     ReportError("This view can't accept files, sorry");
 }
@@ -170,7 +175,23 @@ MegaFSReader::~MegaFSReader()
     workerthread.join();
 }
 
-void MegaFSReader::OnDragDroppedItems(const std::deque<std::filesystem::path>& paths)
+void MegaFSReader::OnDragDroppedMEGAItems(MEGA::ApiPtr source_masp, const deque<unique_ptr<m::MegaNode>>& nodes)
+{
+    if (source_masp == masp)
+    {
+        for (auto& n : nodes)
+        {
+            masp->copyNode(n.get(), mnode.get());
+        }
+        ReportError("Sent " + to_string(nodes.size()) + " node copies");
+    }
+    else
+    {
+        ReportError("Sorry, cannot drag-drop between mega accounts.");
+    }
+}
+
+void MegaFSReader::OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths)
 {
     for (auto p : paths)
     {

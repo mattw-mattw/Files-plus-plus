@@ -19,6 +19,7 @@ std::unique_ptr<FSReader> NewLocalFSReader(const fs::path& p, FSReader::QueueTri
 
 bool LocalUserCrypt(std::string& data, bool encrypt);
 
-
+std::string PlatformLocalUNCPrefix();
+std::string PlatformMegaUNCPrefix(m::MegaApi*);
 
 

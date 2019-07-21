@@ -55,7 +55,9 @@ struct MEGA
     void logoutremove(ApiPtr masp);
 	void deletecache(ApiPtr masp);
 
-	void onLogin(const m::MegaError* e, const std::shared_ptr<m::MegaApi>& masp);
+    ApiPtr findMegaApi(uint64_t dragdroptoken);
+
+	void onLogin(const m::MegaError* e, const ApiPtr& masp);
 
 private:
 	std::mutex m;

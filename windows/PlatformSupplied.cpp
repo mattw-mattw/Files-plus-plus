@@ -107,3 +107,16 @@ bool LocalUserCrypt(string& data, bool encrypt)
 	}
 	return success;
 }
+
+std::string PlatformLocalUNCPrefix()
+{
+    //return "\\\\.\\";
+    return string();  // disappointing: windows explorer doesn't seem to accept UNC paths
+}
+
+std::string PlatformMegaUNCPrefix(m::MegaApi* mp)
+{
+    if (mp)  return "\\\\Files++:" + to_string(reinterpret_cast<uint64_t>(mp)) + "\\";
+    else return "\\\\Files++:";
+}
+

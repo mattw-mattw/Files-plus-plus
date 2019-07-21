@@ -127,6 +127,23 @@ bool MetaPath::GetLocalPath(std::filesystem::path& p) const
 	return false;
 }
 
+bool MetaPath::GetDragDropUNCPath(Item* pItem, std::string& uncPath)
+{
+    switch (pathType)
+    {
+    case LocalFS:   uncPath = PlatformLocalUNCPrefix() + (localPath / pItem->u8Name).u8string();
+                    return true;
+    case MegaFS:    if (auto p = dynamic_cast<ItemMegaNode*>(pItem)) 
+                    {   
+                        uncPath = PlatformMegaUNCPrefix(masp.get()) + masp->getNodePath(p->mnode.get());
+                        return true;
+                    }
+    default:        break;
+    }
+    return false;
+}
+
+
 string MetaPath::GetFullPath(Item& item)
 {
     string s;
