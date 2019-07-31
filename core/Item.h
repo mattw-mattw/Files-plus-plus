@@ -5,6 +5,7 @@
 #include <string>
 
 #include <megaapi.h>
+#include "MEGA.h"
 namespace m = ::mega;
 
 
@@ -59,4 +60,11 @@ struct ItemMegaInshare : public Item
 
 	ItemMegaInshare(std::unique_ptr<m::MegaNode> n, m::MegaApi& api, int64_t size, bool folder) : Item(insharepath(*n, api)), mnode(std::move(n)) {}
 	std::unique_ptr<m::MegaNode> mnode;
+};
+
+
+struct ItemCommand : public Item
+{
+    ItemCommand(std::shared_ptr<MRequest> r) : Item(r->getAction() + ": " + r->getState()) {}
+    std::shared_ptr<MRequest> mrequest;
 };

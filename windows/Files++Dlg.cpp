@@ -12,7 +12,6 @@
 #include <thread>
 #include <algorithm> 
 #include <locale>
-#include <shlobj_core.h>
 #include <fstream>
 #include "../core/PlatformSupplied.h"
 
@@ -952,33 +951,9 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
                 }
             }
 
-            string u16string;
-            m::MegaApi::utf8ToUtf16(copyString.c_str(), &u16string);
-            u16string.append(2, '\0');
-
             if (result == MENU_COPYNAMES || result == MENU_COPYPATHS || result == MENU_COPYNAMESQUOTED || result == MENU_COPYPATHSQUOTED)
             {
-                bool copySucceded = false;
-                for (auto start = chrono::steady_clock::now(); chrono::steady_clock::now() - start < 1s; Sleep(1))
-                {
-                    if (OpenClipboard())
-                    {
-                        if (EmptyClipboard())
-                        {
-                            auto len = u16string.size();
-                            if (HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, len))
-                            {
-                                auto gptr = GlobalLock(hg);
-                                memcpy(gptr, u16string.data(), len);
-                                GlobalUnlock(hg);
-                                auto b = SetClipboardData(CF_UNICODETEXT, hg);
-                                copySucceded = b == hg;
-                            }
-                        }
-                        CloseClipboard();
-                        break;
-                    }
-                }
+                bool copySucceded = PutStringToClipboard(copyString);
 
                 CString s;
                 if (copySucceded) s.Format(_T("Copied %d lines to the clipboard"), (int)lines);

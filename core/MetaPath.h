@@ -8,7 +8,7 @@
 
 class MetaPath
 {
-	enum PathType { None, TopShelf, LocalVolumes, LocalFS, MegaAccount, MegaFS };
+	enum PathType { None, TopShelf, LocalVolumes, LocalFS, MegaAccount, MegaFS, CommandHistory};
 	PathType pathType = None;
 	std::filesystem::path localPath;
 	std::shared_ptr<m::MegaApi> masp;

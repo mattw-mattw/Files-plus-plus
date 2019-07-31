@@ -5,6 +5,7 @@
 #include "UserPassDialog.h"
 #include "LocalFSReader.h"
 #include <wincrypt.h>
+#include <winuser.h>
 
 using namespace std;
 
@@ -28,6 +29,10 @@ void ReportError(const std::string& message, const m::MegaError* e)
 	AfxMessageBox(CA2CT((message + (e ? string(e->getErrorString()) + " (" + to_string(e->getErrorCode()) + ")" : string())).c_str()));
 }
 
+bool QueryUserOkCancel(const std::string& message)
+{
+    return IDOK == AfxMessageBox(CA2CT(message.c_str()), MB_OKCANCEL);
+}
 
 void AddMEGAAccount()
 {
@@ -120,3 +125,32 @@ std::string PlatformMegaUNCPrefix(m::MegaApi* mp)
     else return "\\\\Files++:";
 }
 
+bool PutStringToClipboard(const string& copyString)
+{
+    string u16string;
+    m::MegaApi::utf8ToUtf16(copyString.c_str(), &u16string);
+    u16string.append(2, '\0');
+
+    bool copySucceeded = false;
+    for (auto start = chrono::steady_clock::now(); chrono::steady_clock::now() - start < 1s; Sleep(1))
+    {
+        if (OpenClipboard(NULL))
+        {
+            if (EmptyClipboard())
+            {
+                auto len = u16string.size();
+                if (HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, len))
+                {
+                    auto gptr = GlobalLock(hg);
+                    memcpy(gptr, u16string.data(), len);
+                    GlobalUnlock(hg);
+                    auto b = SetClipboardData(CF_UNICODETEXT, hg);
+                    copySucceeded = b == hg;
+                }
+            }
+            CloseClipboard();
+            break;
+        }
+    }
+    return copySucceeded;
+}

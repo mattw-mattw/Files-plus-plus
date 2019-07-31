@@ -10,6 +10,7 @@
 fs::path BasePath();
 
 void ReportError(const std::string& message, const m::MegaError* e = nullptr);
+bool QueryUserOkCancel(const std::string& message);
 
 void AddMEGAAccount();
 void AddMEGAFolderLink();
@@ -22,4 +23,4 @@ bool LocalUserCrypt(std::string& data, bool encrypt);
 std::string PlatformLocalUNCPrefix();
 std::string PlatformMegaUNCPrefix(m::MegaApi*);
 
-
+bool PutStringToClipboard(const std::string& copyString);

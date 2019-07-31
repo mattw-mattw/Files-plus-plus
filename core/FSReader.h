@@ -4,6 +4,7 @@
 
 #include "MEGA.h"
 #include "Item.h"
+#include <set>
 
 struct FSReader
 {
@@ -25,7 +26,7 @@ struct FSReader
 	virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) { return MenuActions(); }
 
     virtual void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths);
-    virtual void OnDragDroppedMEGAItems(MEGA::ApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes);
+    virtual void OnDragDroppedMEGAItems(ApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes);
 
 protected:
 	bool recurse = false;
@@ -94,12 +95,29 @@ private:
 	void Threaded();
     void RecursiveRead(m::MegaNode& mnode, const std::string& basepath);
     void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths) override;
-    void OnDragDroppedMEGAItems(MEGA::ApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
+    void OnDragDroppedMEGAItems(ApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
+    auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems)->MenuActions override;
+
 
 	NodeUpdateListener listener;
 	std::shared_ptr<m::MegaApi> masp;
 	std::unique_ptr<m::MegaNode> mnode;
+    std::set<::mega::MegaHandle> nodes_present;
 	bool cancelling = false;
 	std::thread workerthread;
 };
 
+
+struct CommandHistoryReader : public FSReader
+{
+    CommandHistoryReader(QueueTrigger t);
+    ~CommandHistoryReader();
+
+    MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
+
+private:
+    void Threaded();
+
+    bool cancelling = false;
+    std::thread workerthread;
+};

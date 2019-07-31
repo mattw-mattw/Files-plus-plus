@@ -68,6 +68,20 @@ auto MEGA::findMegaApi(uint64_t dragdroptoken) -> ApiPtr
     return nullptr;
 }
 
+void MEGA::AddMRequest(ApiPtr masp, shared_ptr<MRequest>&& mrsp)
+{
+    std::lock_guard g(m);
+    //for (auto& a : megaAccounts) { if (a->masp == masp) a->; }
+    //for (auto& a : megaFolderLinks) { if (a->masp == masp) a->; }
+    requestHistory.push_back(move(mrsp));
+}
+
+std::deque<std::shared_ptr<MRequest>> MEGA::getRequestHistory()
+{
+    std::lock_guard g(m);
+    return requestHistory;
+}
+
 void MEGA::onLogin(const m::MegaError* e, const shared_ptr<m::MegaApi>& masp)
 {
 	if (e && e->getErrorCode())
@@ -193,3 +207,24 @@ void MEGA::deletecache(ApiPtr masp)
         }
     }
 }
+
+
+
+MRequest::MRequest(const ApiPtr& ap, const std::string& a)
+    : OneTimeListener(nullptr)
+    , masp(ap)
+    , action(a)
+{
+    g_mega->AddMRequest(masp, std::shared_ptr<MRequest>(this));
+}
+
+MRequest::MRequest(const ApiPtr& ap, const std::string& a, std::function<void(m::MegaRequest* request, m::MegaError* e)> f) 
+    : OneTimeListener(f) 
+    , masp(ap)
+    , action(a)
+{
+    g_mega->AddMRequest(masp, std::shared_ptr<MRequest>(this));
+}
+
+
+

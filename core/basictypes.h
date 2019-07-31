@@ -49,4 +49,13 @@ public:
 	}
 };
 
-using OwnStr = std::unique_ptr<char[]>;
+struct OwnStr : public std::unique_ptr<char>
+{
+    explicit OwnStr(char* s, bool nullIsEmptyStr) : unique_ptr<char>((s || !nullIsEmptyStr) ? s : new char[1]{ 0 }) {}
+    char& operator[](size_t n) { return get()[n]; }
+};
+
+struct OwnString : public std::string
+{
+    explicit OwnString(char* s) : std::string(s ? s : "") {}
+};
