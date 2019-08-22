@@ -2,12 +2,24 @@
 
 #pragma once
 
-#include <string>
+#include "basictypes.h"
 
-#include <megaapi.h>
-#include "MEGA.h"
-namespace m = ::mega;
+class MRequest;
 
+
+struct MenuActions
+{
+    struct MenuItem
+    {
+        std::string text;
+        std::function<void()> action;
+        bool isTitle = false;
+
+        MenuItem(std::string s, std::function<void()> f, bool t = false) : text(move(s)), action(move(f)), isTitle(t) {}
+    };
+
+    std::vector<MenuItem> actions;
+};
 
 struct Item
 {
@@ -65,6 +77,6 @@ struct ItemMegaInshare : public Item
 
 struct ItemCommand : public Item
 {
-    ItemCommand(std::shared_ptr<MRequest> r) : Item(r->getAction() + ": " + r->getState()) {}
+    ItemCommand(std::shared_ptr<MRequest> r);
     std::shared_ptr<MRequest> mrequest;
 };

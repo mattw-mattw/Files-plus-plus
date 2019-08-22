@@ -16,7 +16,7 @@ MEGA::MEGA()
 	{
 		for (auto d = fs::directory_iterator(base); d != fs::directory_iterator(); ++d)
 		{
-			if (d->path().filename().u8string().find("-failed") == string::npos)
+			if (fs::is_directory(d->path()) && d->path().filename().u8string().find("-failed") == string::npos)
 			{
 				string sid, link;
                 ifstream f(d->path() / "sid", ios::binary);
@@ -27,14 +27,16 @@ MEGA::MEGA()
                 if (!sid.empty() && LocalUserCrypt(sid, false))
                 {
                     auto masp = make_shared<m::MegaApi>("BTgWXaYb", d->path().u8string().c_str(), "Files++");
+                    masp->setLoggingName(d->path().filename().u8string().c_str());
                     megaAccounts.push_back(make_shared<Account>(d->path(), masp));
-                    masp->fastLogin(sid.c_str(), new OneTimeListener([this, masp](m::MegaRequest* request, m::MegaError* e) { onLogin(e, masp); }));
+                    masp->fastLogin(sid.c_str(), new OneTimeListener([this, masp](m::MegaRequest* request, m::MegaError* e) { onLogin(e, megaAccounts.back()); }));
                 }
                 else if (!link.empty() && LocalUserCrypt(link, false))
                 {
                     auto masp = make_shared<m::MegaApi>("BTgWXaYb", d->path().u8string().c_str(), "Files++");
-                    megaFolderLinks.push_back(make_shared<Folder>(link, d->path(), masp));
-                    masp->loginToFolder(link.c_str(), new OneTimeListener([this, masp](m::MegaRequest* request, m::MegaError* e) { onLogin(e, masp); }));
+                    masp->setLoggingName(d->path().filename().u8string().c_str());
+                    megaFolderLinks.push_back(make_shared<PublicFolder>(link, d->path(), masp));
+                    masp->loginToFolder(link.c_str(), new OneTimeListener([this, masp](m::MegaRequest* request, m::MegaError* e) { onLogin(e, megaFolderLinks.back()); }));
                 }
                 else
 				{
@@ -60,6 +62,23 @@ MEGA::~MEGA()
     for (auto& a : megaFolderLinks) { a->masp->localLogout(); }
 }
 
+void MEGA::loadFavourites(AccountPtr macc)
+{
+    ifstream faves((macc ? macc->cacheFolder : BasePath()) / "favourites");
+    string s;
+    while (std::getline(faves, s))
+    {
+        auto mp = MetaPath::deserialize(s);
+        if (mp) favourites.Toggle(mp);
+    }
+}
+
+void MEGA::saveFavourites(AccountPtr macc)
+{
+    ofstream faves((macc ? macc->cacheFolder : BasePath()) / "favourites");
+    for (auto& f : favourites.copy()) { string s; if (getAccount(f.Account()) == macc && f.serialize(s)) faves << s << std::endl; }
+}
+
 auto MEGA::findMegaApi(uint64_t dragdroptoken) -> ApiPtr
 {
     std::lock_guard g(m);
@@ -82,7 +101,7 @@ std::deque<std::shared_ptr<MRequest>> MEGA::getRequestHistory()
     return requestHistory;
 }
 
-void MEGA::onLogin(const m::MegaError* e, const shared_ptr<m::MegaApi>& masp)
+void MEGA::onLogin(const m::MegaError* e, AccountPtr macc)
 {
 	if (e && e->getErrorCode())
 	{
@@ -90,12 +109,13 @@ void MEGA::onLogin(const m::MegaError* e, const shared_ptr<m::MegaApi>& masp)
 	}
 	else
 	{
-		masp->fetchNodes(new OneTimeListener([this](m::MegaRequest* request, m::MegaError* e)
+		macc->masp->fetchNodes(new OneTimeListener([this, macc](m::MegaRequest* request, m::MegaError* e)
 			{
 				if (e && e->getErrorCode()) ReportError("MEGA account FetchNodes failed: ", e);
                 ++accountsUpdateCount;
                 ++folderLinksUpdateCount;
                 updateCV.notify_all();
+                loadFavourites(macc);
 			}));
 	}
     ++accountsUpdateCount;
@@ -103,18 +123,24 @@ void MEGA::onLogin(const m::MegaError* e, const shared_ptr<m::MegaApi>& masp)
     updateCV.notify_all();
 }
 
-MEGA::AccountPtr MEGA::makeTempAccount()
+AccountPtr MEGA::makeTempAccount()
 {
-    fs::path p = BasePath() / to_string(time(NULL));
+    string foldername = to_string(time(NULL));
+    fs::path p = BasePath() / foldername;
     fs::create_directories(p);
-    return make_shared<Account>(p, make_shared<m::MegaApi>("BTgWXaYb", p.u8string().c_str(), "Files++"));
+    auto ptr = make_shared<Account>(p, make_shared<m::MegaApi>("BTgWXaYb", p.u8string().c_str(), "Files++"));
+    ptr->masp->setLoggingName(foldername.c_str());
+    return ptr;
 }
 
-MEGA::FolderPtr MEGA::makeTempFolder()
+FolderPtr MEGA::makeTempFolder()
 {
-    fs::path p = BasePath() / to_string(time(NULL));
+    string foldername = to_string(time(NULL));
+    fs::path p = BasePath() / foldername;
     fs::create_directories(p);
-    return make_shared<Folder>("", p, make_shared<m::MegaApi>("BTgWXaYb", p.u8string().c_str(), "Files++"));
+    auto ptr = make_shared<PublicFolder>("", p, make_shared<m::MegaApi>("BTgWXaYb", p.u8string().c_str(), "Files++"));
+    ptr->masp->setLoggingName(foldername.c_str());
+    return ptr;
 }
 
 void MEGA::addAccount(AccountPtr& a) {
@@ -208,7 +234,20 @@ void MEGA::deletecache(ApiPtr masp)
     }
 }
 
+std::string MEGA::ToBase64(const std::string& s) 
+{ 
+    return OwnString(m::MegaApi::binaryToBase64(s.data(), s.size())); 
+}
 
+std::string MEGA::FromBase64(const std::string& s)
+{
+    unsigned char* binary;
+    size_t binarysize;
+    m::MegaApi::base64ToBinary(s.c_str(), &binary, &binarysize);
+    std::string ret((const char*)binary, binarysize);
+    delete[] binary;
+    return ret;
+}
 
 MRequest::MRequest(const ApiPtr& ap, const std::string& a)
     : OneTimeListener(nullptr)

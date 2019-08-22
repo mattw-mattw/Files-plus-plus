@@ -3,15 +3,34 @@
 #pragma once
 
 #include "basictypes.h"
-#include "Item.h"
 #include "FSReader.h"
+
+struct Item;
+
+struct Account
+{
+    std::filesystem::path cacheFolder;
+    ApiPtr masp;
+    Account(const std::filesystem::path& p, ApiPtr ap) : cacheFolder(p), masp(ap) {}
+};
+
+struct PublicFolder : Account
+{
+    std::string folderLink;
+    PublicFolder(const std::string& link, const std::filesystem::path& p, ApiPtr ap) : Account(p, ap), folderLink(link) {}
+    ~PublicFolder() {}
+};
+
+typedef std::shared_ptr<Account> AccountPtr;
+typedef std::shared_ptr<PublicFolder> FolderPtr;
+
 
 class MetaPath
 {
 	enum PathType { None, TopShelf, LocalVolumes, LocalFS, MegaAccount, MegaFS, CommandHistory};
 	PathType pathType = None;
 	std::filesystem::path localPath;
-	std::shared_ptr<m::MegaApi> masp;
+	ApiPtr masp;
 	copy_ptr<m::MegaNode> mnode;
 public:
 	bool operator==(const MetaPath& o) const;
@@ -31,6 +50,12 @@ public:
 	std::string u8DisplayPath() const;
 
 	std::function<bool(std::unique_ptr<Item>& a, std::unique_ptr<Item>& b)> nodeCompare();
+
+    bool serialize(std::string&);
+    static MetaPath deserialize(const std::string&);
+
+    operator bool() { return pathType != None; }
+    ApiPtr Account();
 };
 
 
@@ -62,4 +87,3 @@ public:
 	}
 };
 
-extern Favourites g_favourites;

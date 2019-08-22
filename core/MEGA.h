@@ -10,11 +10,8 @@
 #include <condition_variable>
 
 #include "basictypes.h"
+#include "MetaPath.h"
 
-#include <megaapi.h>
-namespace m = ::mega;
-
-typedef std::shared_ptr<m::MegaApi> ApiPtr;
 
 struct OneTimeListener : public m::MegaRequestListener
 {
@@ -78,30 +75,13 @@ public:
 
 struct MEGA
 {
-
-	struct Account
-	{
-		std::filesystem::path cacheFolder;
-		ApiPtr masp;
-		Account(const std::filesystem::path& p, ApiPtr ap) : cacheFolder(p), masp(ap) {}
-	};
-
-    struct Folder : Account
-    {
-        std::string folderLink;
-        Folder(const std::string& link, const std::filesystem::path& p, ApiPtr ap) : Account(p, ap), folderLink(link) {}
-        ~Folder() {}
-    };
-
-    typedef std::shared_ptr<Account> AccountPtr;
-    typedef std::shared_ptr<Folder> FolderPtr;
-
-
 	MEGA();
 	~MEGA();
 
     std::vector<AccountPtr> accounts() { std::lock_guard g(m); return megaAccounts; }
     std::vector<FolderPtr> folderLinks() { std::lock_guard g(m); return megaFolderLinks; }
+
+    AccountPtr getAccount(ApiPtr a) { std::lock_guard g(m); for (auto& p : megaAccounts) if (p->masp == a) return p; return nullptr; }
 
     std::atomic<int> accountsUpdateCount = 0;
     std::atomic<int> folderLinksUpdateCount = 0;
@@ -121,7 +101,15 @@ struct MEGA
     void AddMRequest(ApiPtr masp, std::shared_ptr<MRequest>&&);
     std::deque<std::shared_ptr<MRequest>> getRequestHistory();
 
-	void onLogin(const m::MegaError* e, const ApiPtr& masp);
+	void onLogin(const m::MegaError* e, AccountPtr masp);
+
+    Favourites favourites;
+    void loadFavourites(AccountPtr macc);
+    void saveFavourites(AccountPtr macc);
+
+
+    static std::string ToBase64(const std::string& s);
+    static std::string FromBase64(const std::string& s);
 
 private:
 	std::mutex m;
@@ -132,14 +120,5 @@ private:
 
 extern MEGA* g_mega;
 
-struct NodeUpdateListener : public m::MegaGlobalListener
-{
-	NotifyQueue<std::unique_ptr<m::MegaNodeList>> nq;
-
-	void onNodesUpdate(m::MegaApi*, m::MegaNodeList* nodes) override
-	{
-		nq.push(std::unique_ptr<m::MegaNodeList>(nodes ? nodes->copy() : nullptr));
-	}
-};
 
 

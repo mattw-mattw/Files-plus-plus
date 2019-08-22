@@ -122,3 +122,40 @@ int CFilesPPApp::ExitInstance()
 
 	return CWinApp::ExitInstance();
 }
+
+UINT_PTR ExecMenu(CMenu& contextMenu, MenuActions& ma, UINT_PTR baseID, POINT xy, CWnd* wnd)
+{
+    size_t baseIndex = UINT_MAX;
+    if (!ma.actions.empty())
+    {
+        contextMenu.AppendMenu(MF_SEPARATOR);
+
+        UINT_PTR id = baseID;
+        for (auto& entry : ma.actions)
+        {
+            if (entry.isTitle)
+            {
+                contextMenu.AppendMenu(MF_SEPARATOR, UINT_MAX, (LPCTSTR)nullptr);
+                contextMenu.AppendMenu(MF_STRING | MF_GRAYED, UINT_MAX, CA2CT(entry.text.c_str()));
+                id++;
+            }
+            else
+            {
+                if (baseIndex == UINT_MAX) baseIndex = id;
+                contextMenu.AppendMenu(MF_STRING, id++, CA2CT(entry.text.c_str()));
+            }
+        }
+    }
+    auto result = contextMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RIGHTBUTTON | TPM_NOANIMATION | TPM_RETURNCMD, xy.x, xy.y, wnd);
+
+    if (result >= baseIndex && result != UINT_MAX)
+    {
+        auto n = result - baseIndex;
+        if (n < ma.actions.size()) ma.actions[n].action();
+        return 0;
+    }
+    else
+    {
+        return result;
+    }
+}

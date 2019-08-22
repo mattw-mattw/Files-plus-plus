@@ -2,6 +2,8 @@
 
 #include "FSReader.h"
 #include "PlatformSupplied.h"
+#include "MEGA.h"
+#include "Item.h"
 
 using namespace std;
 
@@ -59,8 +61,8 @@ void TopShelfReader::Threaded()
         auto megaAccounts = g_mega->accounts();
         for (auto& p : megaAccounts)
         {
-            unique_ptr<char[]> email(p->masp->getMyEmail());
-            Queue(NEWITEM, make_unique<ItemMegaAccount>(email.get() ? email.get() : "<loading>", p->masp));
+            OwnString email(p->masp->getMyEmail());
+            Queue(NEWITEM, make_unique<ItemMegaAccount>(email.empty() ? string("<loading>") : email, p->masp));
         }
         auto megaFolders = g_mega->folderLinks();
         for (auto& p : megaFolders)
@@ -109,13 +111,13 @@ auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> M
     {
         if (auto account = dynamic_cast<ItemMegaAccount*>((*selectedItems)[0]))
         {
-            ma.emplace_back("Log Out and remove local cache", [masp = account->masp]() { g_mega->logoutremove(masp); });
+            ma.actions.emplace_back("Log Out and remove local cache", [masp = account->masp]() { g_mega->logoutremove(masp); });
         }
     }
     else if (selectedItems->empty())
     {
-        ma.emplace_back("Add MEGA Account", []() { if (checkProAccount()) AddMEGAAccount(); else ReportError("Please load a PRO/Business account first"); });
-        ma.emplace_back("Add MEGA Folder Link", []() { AddMEGAFolderLink(); });
+        ma.actions.emplace_back("Add MEGA Account", []() { if (checkProAccount()) AddMEGAAccount(); else ReportError("Please load a PRO/Business account first"); });
+        ma.actions.emplace_back("Add MEGA Folder Link", []() { AddMEGAFolderLink(); });
     }
     return ma;
 };
@@ -188,14 +190,14 @@ auto MegaFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> Men
             {
                 if (n->mnode->isExported())
                 {
-                    ma.emplace_back("Copy Public Link (with key)", [=, masp = masp]()
+                    ma.actions.emplace_back("Copy Public Link (with key)", [=, masp = masp]()
                     {
                         PutStringToClipboard(OwnString(n->mnode->getPublicLink()));
                     });
                 }
                 else
                 {
-                    ma.emplace_back("Export Link", [=, masp = masp]()
+                    ma.actions.emplace_back("Export Link", [=, masp = masp]()
                     {
                         masp->exportNode(n->mnode.get(), new MRequest(masp, "Export Link", [&](m::MegaRequest* request, m::MegaError* e) {
                             if (e && e->getErrorCode() == m::MegaError::API_OK) PutStringToClipboard(request->getLink());
@@ -205,7 +207,7 @@ auto MegaFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> Men
             }
         }
 
-        ma.emplace_back("Send to Trash", [=, masp = masp]() 
+        ma.actions.emplace_back("Send to Trash", [=, masp = masp]()
             {  
                 unique_ptr<m::MegaNode> bin(masp->getRubbishNode()); 
                 for (auto i : *selectedItems) 
@@ -213,7 +215,7 @@ auto MegaFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> Men
                         masp->moveNode(n->mnode.get(), bin.get()); 
             });
 
-        ma.emplace_back("Delete (no undo)", [=, masp = masp]() 
+        ma.actions.emplace_back("Delete (no undo)", [=, masp = masp]()
             { 
             if (QueryUserOkCancel("Please confirm permanent delete"))
                 for (auto i : *selectedItems)
@@ -226,6 +228,27 @@ auto MegaFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> Men
 
 void MegaFSReader::OnDragDroppedMEGAItems(ApiPtr source_masp, const deque<unique_ptr<m::MegaNode>>& nodes)
 {
+    OwnString targetPath(masp->getNodePath(mnode.get()));
+    targetPath += "/";
+    for (auto& n : nodes)
+    {
+        OwnString s(masp->getNodePath(n.get()));
+        s += "/";
+        if (s.size() <= targetPath.size() && memcmp(s.data(), targetPath.data(), s.size()) == 0)
+        {
+            ReportError("Copying " + OwnString(masp->getNodePath(n.get())) + " to " + targetPath + " would be problematic");
+            return;
+        }
+        else if (s.size() > targetPath.size() && memcmp(s.data(), targetPath.data(), targetPath.size()) == 0)
+        {
+            if (s.find("/", targetPath.size()) == s.size()-1)
+            {
+                ReportError("This item is already in this folder");
+                return;
+            }
+        }
+    }
+
     if (source_masp == masp)
     {
         for (auto& n : nodes)

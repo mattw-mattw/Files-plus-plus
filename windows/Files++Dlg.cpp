@@ -14,6 +14,7 @@
 #include <locale>
 #include <fstream>
 #include "../core/PlatformSupplied.h"
+#include "../core/MEGA.h"
 
 #undef min
 #undef max
@@ -110,7 +111,11 @@ CFilesPPDlg::CFilesPPDlg(CWnd* pParent /*=nullptr*/)
     : CDialogEx(IDD_FILESPP_DIALOG, pParent)
     , m_contentCtl(*this)
 {
-    if (!g_mega) g_mega = new MEGA;
+    if (!g_mega)
+    {
+        g_mega = new MEGA;
+        g_mega->loadFavourites(nullptr);
+    }
 
     EnableActiveAccessibility();
     m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
@@ -329,6 +334,14 @@ BOOL CFilesPPDlg::OnInitDialog()
 
 void CFilesPPDlg::LoadContent(bool resetFilter)
 {
+    string title = "Files++";
+    if (auto acc = m_pathCtl.metaPath.Account())
+    {
+        OwnString email(acc->getMyEmail());
+        if (!email.empty()) title = email;
+    }
+    SetWindowText(CA2CT(title.c_str()));
+    
     m_pathCtl.SetWindowText();
     m_contentCtl.SetItemCount(0);
     m_contentCtl.filteredItems.clear();
@@ -417,21 +430,6 @@ void remove_if_absent(T1& a, T2& b)
         hackptr.release();
     }
     a.erase(wa, a.end());
-}
-
-std::function<bool(unique_ptr<Item>& a, unique_ptr<Item>& b)> MetaPath::nodeCompare()
-{
-    switch (pathType)
-    {
-    case MegaFS: return [](unique_ptr<Item>& a, unique_ptr<Item>& b) 
-                            { 
-                                return static_cast<ItemMegaNode*>(a.get())->mnode->getHandle() < static_cast<ItemMegaNode*>(b.get())->mnode->getHandle();
-                            };
-    default: return [](unique_ptr<Item>& a, unique_ptr<Item>& b) 
-                            { 
-                                return a->u8Name < b->u8Name; 
-                            };
-    }
 }
 
 LRESULT CFilesPPDlg::OnContentUpdate(WPARAM wParam, LPARAM lParam)
@@ -913,27 +911,13 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 
         map<int, std::function<void()>> menuexec;
 
-        FSReader::MenuActions ma;
+        MenuActions ma;
         if (activeReader) ma = activeReader->GetMenuActions(selectedItems);
-        if (!ma.empty())
-        {
-            contextMenu.AppendMenu(MF_SEPARATOR);
 
-            int id = MENU_SUBSEQUENT;
-            for (auto& entry : ma)
-            {
-                contextMenu.AppendMenu(MF_STRING, id++, CA2CT(entry.first.c_str()));
-            }
-        }
         ClientToScreen(&pNMItemActivate->ptAction);
-        auto result = contextMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RIGHTBUTTON | TPM_NOANIMATION | TPM_RETURNCMD, pNMItemActivate->ptAction.x, pNMItemActivate->ptAction.y, this);
-        
-        if (result >= MENU_SUBSEQUENT)
-        {
-            unsigned n = result - MENU_SUBSEQUENT;
-            if (n < ma.size()) ma[n].second();
-        }
-        else
+        auto result = ExecMenu(contextMenu, ma, MENU_SUBSEQUENT, pNMItemActivate->ptAction, this);
+
+        if (result)
         {
             string copyString;
             int lines = 0;
@@ -1075,7 +1059,6 @@ void CFilesPPDlg::OnRButtonDown(UINT nFlags, CPoint point)
     CDialogEx::OnRButtonDown(nFlags, point);
 }
 
-Favourites g_favourites;
 
 void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
 {
@@ -1083,7 +1066,7 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
 
     if (pNMUpDown->iDelta > 0)
     {
-        if (g_favourites.Toggle(m_pathCtl.metaPath))
+        if (g_mega->favourites.Toggle(m_pathCtl.metaPath))
         {
             AfxMessageBox(_T("Added favourite"));
         }
@@ -1091,24 +1074,47 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
         {
             AfxMessageBox(_T("Removed favourite"));
         }
+        g_mega->saveFavourites(g_mega->getAccount(m_pathCtl.metaPath.Account()));
     }
     else if (pNMUpDown->iDelta < 0)
     {
         CMenu m;
         m.CreatePopupMenu();
-        auto favourites = g_favourites.copy();
+        auto favourites = g_mega->favourites.copy();
+        ApiPtr currAcc = nullptr;
+        MenuActions ma;
         for (unsigned i = 0; i < favourites.size(); ++i)
         {
-            m.AppendMenu(MF_STRING, i + 1, CA2CT(favourites[i].u8DisplayPath().c_str()));
+            
+            if (favourites[i].Account() != currAcc)
+            {
+                currAcc = favourites[i].Account();
+                ma.actions.push_back(MenuActions::MenuItem{ currAcc ? OwnString(currAcc->getMyEmail()) : string("<Local>") , nullptr, true });
+            }
+            ma.actions.push_back(MenuActions::MenuItem{ favourites[i].u8DisplayPath() , [thisfavourite = favourites[i], this]()
+                {
+                    if (GetKeyState(VK_SHIFT) & 0x8000)
+                    {
+                        // make a new top level window (complete with its own gui thread) to load subdir 
+                        auto t = make_unique<CFilesPPDlgThread>();
+                        t->dlg.m_pathCtl.metaPath = thisfavourite;
+                        t->m_bAutoDelete = true;
+                        GetWindowRect(t->dlg.originatorWindowRect);
+                        if (!t->CreateThread()) AfxMessageBox(_T("Thread creation failed"));
+                        else t.release();
+                    }
+                    else
+                    {
+                        m_pathCtl.PrepareNavigateBack();
+                        m_pathCtl.metaPath = thisfavourite;
+                        LoadContent(true);
+                    }
+
+                } });
         }
         CRect r;
         m_spinCtrl.GetWindowRect(r);
-        int result = m.TrackPopupMenu(TPM_RETURNCMD, r.left, r.bottom, this, r);
-        if (result > 0)
-        {
-            m_pathCtl.metaPath = favourites[result - 1];
-            LoadContent(true);
-        }
+        ExecMenu(m, ma, 100, POINT{ r.left, r.bottom }, this);
     }
     *pResult = 0;
 }

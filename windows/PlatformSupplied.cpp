@@ -1,11 +1,13 @@
 // Copyright 2019 The Files++ Authors.  Licence via 2-Clause BSD, see the LICENSE file.
 
 #include "stdafx.h"
-#include "../core/PlatformSupplied.h"
-#include "UserPassDialog.h"
-#include "LocalFSReader.h"
 #include <wincrypt.h>
 #include <winuser.h>
+
+#include "../core/PlatformSupplied.h"
+#include "../core/MEGA.h"
+#include "UserPassDialog.h"
+#include "LocalFSReader.h"
 
 using namespace std;
 
@@ -36,7 +38,7 @@ bool QueryUserOkCancel(const std::string& message)
 
 void AddMEGAAccount()
 {
-	MEGA::AccountPtr acc = g_mega->makeTempAccount();
+	AccountPtr acc = g_mega->makeTempAccount();
 
 	UserPassDialog dlg;
 	for (;;)
@@ -50,7 +52,7 @@ void AddMEGAAccount()
 			{
 				g_mega->addAccount(acc);
 				AfxMessageBox(_T("Login succeeded"));
-				g_mega->onLogin(nullptr, acc->masp);
+				g_mega->onLogin(nullptr, acc);
 				return;
 			}
 			AfxMessageBox(_T("Login failed"));
@@ -64,7 +66,7 @@ void AddMEGAAccount()
 
 void AddMEGAFolderLink()
 {
-    MEGA::FolderPtr acc = g_mega->makeTempFolder();
+    FolderPtr acc = g_mega->makeTempFolder();
 
     UserPassDialog dlg;
     for (;;)
@@ -79,7 +81,7 @@ void AddMEGAFolderLink()
                 acc->folderLink = CT2CA(dlg.name);
                 g_mega->addFolder(acc);
                 AfxMessageBox(_T("Opened Folder Ok"));
-                g_mega->onLogin(nullptr, acc->masp);
+                g_mega->onLogin(nullptr, acc);
                 return;
             }
             AfxMessageBox(_T("Folder link failed to open"));

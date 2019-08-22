@@ -7,12 +7,16 @@
 #include <mutex>
 #include <string>
 #include <assert.h>
+#include <set>
+#include <functional>
 
 #include <filesystem>
 namespace fs = std::filesystem;
 
 #include <megaapi.h>
 namespace m = ::mega;
+
+typedef std::shared_ptr<m::MegaApi> ApiPtr;
 
 template<class T> 
 struct copy_ptr : public std::unique_ptr<T>
@@ -49,13 +53,13 @@ public:
 	}
 };
 
-struct OwnStr : public std::unique_ptr<char>
+struct OwnStr : public std::unique_ptr<char[]>
 {
-    explicit OwnStr(char* s, bool nullIsEmptyStr) : unique_ptr<char>((s || !nullIsEmptyStr) ? s : new char[1]{ 0 }) {}
+    explicit OwnStr(char* s, bool nullIsEmptyStr) : unique_ptr<char[]>((s || !nullIsEmptyStr) ? s : new char[1]{ 0 }) {}
     char& operator[](size_t n) { return get()[n]; }
 };
 
 struct OwnString : public std::string
 {
-    explicit OwnString(char* s) : std::string(s ? s : "") {}
+    explicit OwnString(const char* s) : std::string(s ? s : "") { delete[] s; }
 };

@@ -7,7 +7,7 @@
 #endif
 
 #include "resource.h"		// main symbols
-
+#include "../core/Item.h"
 
 // CFilesPPApp:
 // See FilesPP.cpp for the implementation of this class
@@ -29,3 +29,6 @@ public:
 };
 
 extern CFilesPPApp theApp;
+
+
+UINT_PTR ExecMenu(CMenu& contextMenu, MenuActions& ma, UINT_PTR baseID, POINT xy, CWnd* wnd);

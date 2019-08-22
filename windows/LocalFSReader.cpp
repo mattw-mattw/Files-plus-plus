@@ -101,8 +101,8 @@ void ExploreProperties(HWND hwnd, const fs::path& p)
 auto LocalFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
 {
     MenuActions ma;
-    ma.emplace_back("Explore To", [this, selectedItems]() { for (auto i : *selectedItems) ExploreTo(hwnd, dir / i->u8Name); });
-    ma.emplace_back("Explorer Properties", [this, selectedItems]() { for (auto i : *selectedItems) ExploreProperties(hwnd, dir / i->u8Name); });
+    ma.actions.emplace_back("Explore To", [this, selectedItems]() { for (auto i : *selectedItems) ExploreTo(hwnd, dir / i->u8Name); });
+    ma.actions.emplace_back("Explorer Properties", [this, selectedItems]() { for (auto i : *selectedItems) ExploreProperties(hwnd, dir / i->u8Name); });
     return ma;
 }
 

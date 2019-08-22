@@ -2,9 +2,8 @@
 
 #pragma once
 
-#include "MEGA.h"
+#include "basictypes.h"
 #include "Item.h"
-#include <set>
 
 struct FSReader
 {
@@ -22,7 +21,6 @@ struct FSReader
 	struct Entry { Action action; Batch batch; };
 	NotifyQueue<Entry> q;
 
-	typedef std::vector<std::pair<std::string, std::function<void()>>> MenuActions;
 	virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) { return MenuActions(); }
 
     virtual void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths);
@@ -85,6 +83,15 @@ private:
 	std::thread workerthread;
 };
 
+struct NodeUpdateListener : public m::MegaGlobalListener
+{
+    NotifyQueue<std::unique_ptr<m::MegaNodeList>> nq;
+
+    void onNodesUpdate(m::MegaApi*, m::MegaNodeList* nodes) override
+    {
+        nq.push(std::unique_ptr<m::MegaNodeList>(nodes ? nodes->copy() : nullptr));
+    }
+};
 
 struct MegaFSReader : public FSReader
 {

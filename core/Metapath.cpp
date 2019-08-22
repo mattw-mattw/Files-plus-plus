@@ -1,6 +1,7 @@
 // Copyright 2019 The Files++ Authors.  Licence via 2-Clause BSD, see the LICENSE file.
 
 #include "MetaPath.h"
+#include "MEGA.h"
 #include "PlatformSupplied.h"
 
 using namespace std;
@@ -213,4 +214,110 @@ bool MetaPath::operator==(const MetaPath& o) const
     case MegaFS: return masp == o.masp && mnode->getHandle() == o.mnode->getHandle();
     }
     return false;
+}
+
+std::function<bool(unique_ptr<Item>& a, unique_ptr<Item>& b)> MetaPath::nodeCompare()
+{
+    switch (pathType)
+    {
+    case MegaFS: return [](unique_ptr<Item>& a, unique_ptr<Item>& b)
+    {
+        return static_cast<ItemMegaNode*>(a.get())->mnode->getHandle() < static_cast<ItemMegaNode*>(b.get())->mnode->getHandle();
+    };
+    default: return [](unique_ptr<Item>& a, unique_ptr<Item>& b)
+    {
+        return a->u8Name < b->u8Name;
+    };
+    }
+}
+
+ApiPtr MetaPath::Account()
+{
+    switch (pathType)
+    {
+    case TopShelf: 
+    case LocalFS: 
+    case LocalVolumes:  return nullptr;
+    case MegaAccount:
+    case MegaFS: return masp;
+    }
+    return nullptr;
+}
+
+bool MetaPath::serialize(std::string& s)
+{
+    switch (pathType)
+    {
+        case TopShelf: {
+            s = "TopShelf";
+            return true;
+        }
+        case LocalFS: {
+            s = "LocalFS/" + MEGA::ToBase64(localPath.u8string());
+            return true;
+        }
+        case LocalVolumes: {
+            s = "LocalVolumes";
+            return true;
+        }
+        case MegaAccount: {
+            s = "MegaAccount/" + MEGA::ToBase64(OwnString(masp->getMyEmail()));
+            return true;
+        }
+        case MegaFS: {
+            s = "MegaFS/" + MEGA::ToBase64(OwnString(masp->getMyEmail())) + "/" + MEGA::ToBase64(masp->getNodePath(mnode.get()));
+            return true;
+        }
+    }
+    assert(false);    
+    return false;
+}
+
+MetaPath MetaPath::deserialize(const std::string& s)
+{
+    MetaPath mp;
+    if (s == "TopShelf")
+    {
+        mp.pathType = TopShelf;
+        return mp;
+    }
+    if (s.size() >= 9 && s.substr(0, 8) == "LocalFS/")
+    {
+        mp.pathType = LocalFS;
+        mp.localPath = MEGA::FromBase64(s.substr(8));
+        return mp;
+    }
+    if (s == "LocalVolumes")
+    {
+        mp.pathType = LocalVolumes;
+        return mp;
+    }
+    if (s.size() >= 13 && s.substr(0, 12) == "MegaAccount/")
+    {
+        mp.pathType = MegaAccount;
+        auto acc = MEGA::FromBase64(s.substr(12));
+        for (auto ptr : g_mega->accounts()) { 
+            OwnString email(ptr->masp->getMyEmail());
+            if (email == acc) 
+            { 
+                mp.masp = ptr->masp; return mp; 
+            } 
+        };
+    }
+    if (s.size() >= 8 && s.substr(0, 7) == "MegaFS/")
+    {
+        mp.pathType = MegaFS;
+        auto n = s.find("/", 7);
+        if (n+1 && n > 7)
+        {
+            auto acc = MEGA::FromBase64(s.substr(7, n-7));
+            auto path = MEGA::FromBase64(s.substr(n+1));
+            for (auto ptr : g_mega->accounts()) { if (OwnString(ptr->masp->getMyEmail()) == acc) { mp.masp = ptr->masp; } };
+            if (mp.masp) mp.mnode.reset(mp.masp->getNodeByPath(path.c_str()));
+            if (mp.masp && mp.mnode) return mp;
+        }
+    }
+    assert(false);
+    mp.pathType = None;
+    return mp;
 }
