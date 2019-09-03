@@ -45,7 +45,7 @@ public:
 
     std::string GetFullPath(Item&);
 
-	std::unique_ptr<FSReader> GetContentReader(FSReader::QueueTrigger t, bool recurse) const;
+	std::unique_ptr<FSReader> GetContentReader(FSReader::QueueTrigger t, bool recurse, UserFeedback& uf) const;
 
 	std::string u8DisplayPath() const;
 

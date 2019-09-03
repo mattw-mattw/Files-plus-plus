@@ -7,8 +7,8 @@
 
 using namespace std;
 
-LocalVolumeReader::LocalVolumeReader(QueueTrigger t, bool r)
-    : FSReader(t, r)
+LocalVolumeReader::LocalVolumeReader(QueueTrigger t, bool r, UserFeedback& uf)
+    : FSReader(t, r, uf)
     , workerthread([this]() { Threaded(); })
 {
 }
@@ -47,8 +47,8 @@ void LocalVolumeReader::Threaded()
     Send();
 }
 
-LocalFSReader::LocalFSReader(fs::path p, QueueTrigger t, bool r)
-    : FSReader(t, r)
+LocalFSReader::LocalFSReader(fs::path p, QueueTrigger t, bool r, UserFeedback& uf)
+    : FSReader(t, r, uf)
     , dir(p)
 {
     memset(&overlapped, 0, sizeof(overlapped));

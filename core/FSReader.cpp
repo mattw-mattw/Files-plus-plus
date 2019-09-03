@@ -7,6 +7,18 @@
 
 using namespace std;
 
+
+void UserFeedback::SetUserFeedback(const std::ostringstream& s)
+{
+    SetUserFeedbackStr(s.str());
+}
+
+void UserFeedback::SetUserFeedbackStr(const std::string& s)
+{
+    SetUserFeedbackCStr(s.c_str());
+}
+
+
 void FSReader::Send()
 {
     if (!currentitems.empty())
@@ -38,8 +50,8 @@ void FSReader::OnDragDroppedMEGAItems(ApiPtr masp, const deque<unique_ptr<m::Meg
     ReportError("This view can't accept files, sorry");
 }
 
-TopShelfReader::TopShelfReader(QueueTrigger t, bool r)
-    : FSReader(t, r)
+TopShelfReader::TopShelfReader(QueueTrigger t, bool r, UserFeedback& uf)
+    : FSReader(t, r, uf)
     , workerthread([this]() { Threaded(); })
 {
 }
@@ -101,7 +113,7 @@ bool checkProAccount()
     unique_lock g(g_mega->updateCVMutex);
     g_mega->updateCV.wait(g, [&]() { return pro + nonpro == accounts.size(); });
 
-    return pro >= 1;
+    return pro >= 1 || nonpro == 0;
 }
 
 auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
@@ -122,8 +134,8 @@ auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> M
     return ma;
 };
 
-MegaAccountReader::MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r)
-    : FSReader(t, r)
+MegaAccountReader::MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r, UserFeedback& uf)
+    : FSReader(t, r, uf)
     , masp(p)
     , workerthread([this]() { Threaded(); })
 {
@@ -163,8 +175,8 @@ void MegaAccountReader::Threaded()
     Send();
 }
 
-MegaFSReader::MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r)
-    : FSReader(t, r)
+MegaFSReader::MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r, UserFeedback& uf)
+    : FSReader(t, r, uf)
     , masp(p)
     , mnode(move(n))
     , workerthread([this]() { Threaded(); })
@@ -255,7 +267,7 @@ void MegaFSReader::OnDragDroppedMEGAItems(ApiPtr source_masp, const deque<unique
         {
             masp->copyNode(n.get(), mnode.get());
         }
-        ReportError("Sent " + to_string(nodes.size()) + " node copies");
+        userFeedback.SetUserFeedback(ostringstream() << "Sent " << nodes.size() << " node copies");
     }
     else
     {
@@ -400,8 +412,8 @@ void MegaFSReader::Threaded()
 }
 
 
-CommandHistoryReader::CommandHistoryReader(QueueTrigger t)
-    : FSReader(t, false)
+CommandHistoryReader::CommandHistoryReader(QueueTrigger t, UserFeedback& uf)
+    : FSReader(t, false, uf)
     , workerthread([this]() { Threaded(); })
 {
 }

@@ -2,8 +2,21 @@
 
 #pragma once
 
+#include <sstream>
 #include "basictypes.h"
 #include "Item.h"
+
+struct UserFeedback
+{
+    void SetUserFeedback(const std::ostringstream& s);
+    virtual void SetUserFeedbackStr(const std::string& s);
+    virtual void SetUserFeedbackCStr(const char* s) = 0;
+
+    virtual void ClearFilteredItems() = 0;
+    virtual void AddFilteredItem(Item*) = 0;
+    virtual void DoneAddingFilteredItems() = 0;
+    virtual void SetFilterText(const std::string& s) = 0;
+};
 
 struct FSReader
 {
@@ -14,15 +27,15 @@ struct FSReader
 
 	typedef std::function<void()> QueueTrigger;
 
-	FSReader(QueueTrigger t, bool r) : trigger(t), recurse(r) {}
+	FSReader(QueueTrigger t, bool r, UserFeedback& uf) : trigger(t), recurse(r), userFeedback(uf) {}
 	virtual ~FSReader() {}
 
 	typedef std::vector<std::unique_ptr<Item>> Batch;
 	struct Entry { Action action; Batch batch; };
 	NotifyQueue<Entry> q;
 
-	virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) { return MenuActions(); }
-
+	// gui thread functions
+    virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) { return MenuActions(); }
     virtual void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths);
     virtual void OnDragDroppedMEGAItems(ApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes);
 
@@ -33,6 +46,9 @@ protected:
 	Batch currentitems;
 	QueueTrigger trigger;
 
+    // only use this in gui thread functions
+    UserFeedback& userFeedback;
+
 	void Send();
 	void Queue(Action action, std::unique_ptr<Item>&& p);
 };
@@ -40,7 +56,7 @@ protected:
 
 struct TopShelfReader : public FSReader
 {
-	TopShelfReader(QueueTrigger t, bool r);
+	TopShelfReader(QueueTrigger t, bool r, UserFeedback& uf);
 	~TopShelfReader();
 
 	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
@@ -58,7 +74,7 @@ class LocalVolumeReader : public FSReader
 	bool cancelling = false;
 
 public:
-	LocalVolumeReader(QueueTrigger t, bool r);
+	LocalVolumeReader(QueueTrigger t, bool r, UserFeedback& uf);
 	~LocalVolumeReader();
 
 private:
@@ -70,7 +86,7 @@ private:
 
 struct MegaAccountReader : public FSReader
 {
-	MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r);
+	MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r, UserFeedback& uf);
 	~MegaAccountReader();
 
 	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
@@ -95,7 +111,7 @@ struct NodeUpdateListener : public m::MegaGlobalListener
 
 struct MegaFSReader : public FSReader
 {
-	MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode>, QueueTrigger t, bool r);
+	MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode>, QueueTrigger t, bool r, UserFeedback& uf);
 	~MegaFSReader();
 
 private:
@@ -117,7 +133,7 @@ private:
 
 struct CommandHistoryReader : public FSReader
 {
-    CommandHistoryReader(QueueTrigger t);
+    CommandHistoryReader(QueueTrigger t, UserFeedback& uf);
     ~CommandHistoryReader();
 
     MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;

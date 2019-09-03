@@ -18,7 +18,7 @@ class LocalFSReader : public FSReader
 public:
 	std::filesystem::path dir;
 
-	LocalFSReader(std::filesystem::path p, QueueTrigger, bool r);
+	LocalFSReader(std::filesystem::path p, QueueTrigger, bool r, UserFeedback& uf);
 	~LocalFSReader();
 
 	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;

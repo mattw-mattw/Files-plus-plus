@@ -13,6 +13,7 @@
 #include <algorithm> 
 #include <locale>
 #include <fstream>
+#include <sstream>
 #include "../core/PlatformSupplied.h"
 #include "../core/MEGA.h"
 
@@ -356,7 +357,7 @@ void CFilesPPDlg::LoadContent(bool resetFilter)
 
     FSReader::QueueTrigger t = [wnd = m_hWnd]() { ::PostMessage(wnd, WM_APP_CONTENTUPDATE, (WPARAM)0, (LPARAM)0); };
 
-    activeReader = m_pathCtl.metaPath.GetContentReader(t, filterSettings.recursesubfolders);
+    activeReader = m_pathCtl.metaPath.GetContentReader(t, filterSettings.recursesubfolders, *this);
 }
 
 
@@ -673,17 +674,17 @@ void CFilesPPDlg::OnBnClickedButton2()
     }
 }
 
-Filter::Filter(const FilterDlg::Settings& filterSettings, CFilesPPDlg& d) : dlg(d)
+Filter::Filter(const FilterDlg::Settings& filterSettings, UserFeedback& uf) : userFeedback(uf)
 {
     noFolders = filterSettings.filtertype == "Hide folders";
     noFiles = filterSettings.filtertype == "Hide files";
     filterFolders = filterSettings.filtertype == "Filter all" || noFiles;
 
-    CString buttonText;
+    string buttonText;
     if (noFolders) buttonText = "Files: ";
     if (noFiles) buttonText = "Folders: ";
-    buttonText += filterSettings.text.IsEmpty() ? _T(".*") : filterSettings.text;
-    dlg.m_filterButton.SetWindowText(buttonText);
+    buttonText += CT2CA(filterSettings.text.IsEmpty() ? CString(".*") : filterSettings.text);
+    uf.SetFilterText(buttonText);
 
     string exp = CT2CA(filterSettings.text);
     if (!filterSettings.regularexpression)
@@ -699,7 +700,7 @@ Filter::Filter(const FilterDlg::Settings& filterSettings, CFilesPPDlg& d) : dlg(
 
     re = std::regex(exp.begin(), exp.end(), filterSettings.casesensitive ? std::regex::ECMAScript : std::regex::icase);
 
-    dlg.m_contentCtl.filteredItems.clear();
+    uf.ClearFilteredItems();
 }
 
 void Filter::FilterNewItems(std::deque<std::unique_ptr<Item>>& items)
@@ -712,11 +713,11 @@ void Filter::FilterNewItems(std::deque<std::unique_ptr<Item>>& items)
         {
             if (!regex_search(p->u8Name.c_str(), re)) continue;
         }
-        dlg.m_contentCtl.filteredItems.push_back(p.get());
+        userFeedback.AddFilteredItem(p.get());
         if (p->isFolder()) ++folders;
         else ++files, size += p->size();
     }
-    dlg.m_contentCtl.SetItemCount(int(dlg.m_contentCtl.filteredItems.size()));
+    userFeedback.DoneAddingFilteredItems();
 }
 
 void Filter::FilterNewItems(std::vector<std::unique_ptr<Item>>& items)
@@ -729,18 +730,16 @@ void Filter::FilterNewItems(std::vector<std::unique_ptr<Item>>& items)
         {
             if (!regex_search(p->u8Name.c_str(), re)) continue;
         }
-        dlg.m_contentCtl.filteredItems.push_back(p.get());
+        userFeedback.AddFilteredItem(p.get());
         if (p->isFolder()) ++folders;
         else ++files, size += p->size();
     }
-    dlg.m_contentCtl.SetItemCount(int(dlg.m_contentCtl.filteredItems.size()));
+    userFeedback.DoneAddingFilteredItems();
 }
 
 void Filter::ApplyStatus()
 {
-    CString s;
-    s.Format(_T("Folders: %d  Files: %d  Size: %lld"), folders, files, size);
-    dlg.m_statusBar.SetText(s, 255, SBT_NOBORDERS);
+    userFeedback.SetUserFeedback(ostringstream() << "Folders: " << folders << " Files: " << files << "  Size: " << size);
 }
 
 
@@ -939,10 +938,8 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
             {
                 bool copySucceded = PutStringToClipboard(copyString);
 
-                CString s;
-                if (copySucceded) s.Format(_T("Copied %d lines to the clipboard"), (int)lines);
-                else s.Format(_T("Copy to clipboard failed"));
-                m_statusBar.SetText(s, 255, SBT_NOBORDERS);
+                if (copySucceded) SetUserFeedback(ostringstream() << "Copied " << lines << " lines to the clipboard");
+                else SetUserFeedback(ostringstream() << "Copy to clipboard failed");
             }
         }
     }
@@ -950,6 +947,30 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
     *pResult = 0;
 }
 
+void CFilesPPDlg::SetUserFeedbackCStr(const char* s)
+{
+    m_statusBar.SetText(CA2CT(s), 255, SBT_NOBORDERS);
+}
+
+void CFilesPPDlg::ClearFilteredItems()
+{
+    m_contentCtl.filteredItems.clear();
+}
+
+void CFilesPPDlg::AddFilteredItem(Item* p)
+{
+    m_contentCtl.filteredItems.push_back(p);
+}
+
+void CFilesPPDlg::DoneAddingFilteredItems()
+{
+    m_contentCtl.SetItemCount(int(m_contentCtl.filteredItems.size()));
+}
+
+void CFilesPPDlg::SetFilterText(const string& s)
+{
+    m_filterButton.SetWindowText(CA2CT(s.c_str()));
+}
 
 class myCOleDataSource : public COleDropSource
 {

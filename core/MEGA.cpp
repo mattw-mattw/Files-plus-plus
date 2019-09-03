@@ -29,14 +29,14 @@ MEGA::MEGA()
                     auto masp = make_shared<m::MegaApi>("BTgWXaYb", d->path().u8string().c_str(), "Files++");
                     masp->setLoggingName(d->path().filename().u8string().c_str());
                     megaAccounts.push_back(make_shared<Account>(d->path(), masp));
-                    masp->fastLogin(sid.c_str(), new OneTimeListener([this, masp](m::MegaRequest* request, m::MegaError* e) { onLogin(e, megaAccounts.back()); }));
+                    masp->fastLogin(sid.c_str(), new OneTimeListener([this, account = megaAccounts.back()](m::MegaRequest* request, m::MegaError* e) { onLogin(e, account); }));
                 }
                 else if (!link.empty() && LocalUserCrypt(link, false))
                 {
                     auto masp = make_shared<m::MegaApi>("BTgWXaYb", d->path().u8string().c_str(), "Files++");
                     masp->setLoggingName(d->path().filename().u8string().c_str());
                     megaFolderLinks.push_back(make_shared<PublicFolder>(link, d->path(), masp));
-                    masp->loginToFolder(link.c_str(), new OneTimeListener([this, masp](m::MegaRequest* request, m::MegaError* e) { onLogin(e, megaFolderLinks.back()); }));
+                    masp->loginToFolder(link.c_str(), new OneTimeListener([this, folderlink = megaFolderLinks.back()](m::MegaRequest* request, m::MegaError* e) { onLogin(e, folderlink); }));
                 }
                 else
 				{
@@ -57,9 +57,24 @@ MEGA::MEGA()
 
 MEGA::~MEGA()
 {
-	std::lock_guard g(m);
-    for (auto& a : megaAccounts) { a->masp->localLogout(); }
-    for (auto& a : megaFolderLinks) { a->masp->localLogout(); }
+    std::vector<std::weak_ptr<Account>> aps;
+    std::vector<std::weak_ptr<PublicFolder>> fps;
+    std::vector<std::weak_ptr<m::MegaApi>> mas;
+    
+    {
+        std::lock_guard g(m);
+        for (auto& a : megaAccounts) { a->masp->localLogout(); aps.push_back(a); mas.push_back(a->masp); a.reset(); }
+        for (auto& a : megaFolderLinks) { a->masp->localLogout(); fps.push_back(a); mas.push_back(a->masp); a.reset();  }
+    }
+
+    do
+    {
+        while (aps.size() && aps.back().expired()) aps.pop_back();
+        while (fps.size() && fps.back().expired()) fps.pop_back();
+        while (mas.size() && mas.back().expired()) mas.pop_back();
+        WaitMillisec(10);
+    } while (aps.size() || fps.size() || mas.size());
+
 }
 
 void MEGA::loadFavourites(AccountPtr macc)

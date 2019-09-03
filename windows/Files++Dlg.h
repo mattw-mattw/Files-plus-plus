@@ -46,9 +46,9 @@ public:
 	std::regex re;
 	int files = 0, folders = 0;
 	int64_t size = 0;
-	CFilesPPDlg& dlg;
+	UserFeedback& userFeedback;
 
-	Filter(const FilterDlg::Settings& filterSettings, CFilesPPDlg& d);
+	Filter(const FilterDlg::Settings& filterSettings, UserFeedback& uf);
 	void FilterNewItems(std::vector<std::unique_ptr<Item>>& items);
 	void FilterNewItems(std::deque<std::unique_ptr<Item>>& items);
 	void ApplyStatus();
@@ -76,7 +76,7 @@ public:
 	bool NavigateForward();
 };
 
-class CFilesPPDlg : public CDialogEx
+class CFilesPPDlg : public CDialogEx, public UserFeedback
 {
 	DECLARE_DYNAMIC(CFilesPPDlg);
 
@@ -112,6 +112,12 @@ public:
 	HICON m_hIcon;
 
 	BOOL CanExit();
+
+    void SetUserFeedbackCStr(const char* s) override;
+    void ClearFilteredItems() override;
+    void AddFilteredItem(Item*) override;
+    void DoneAddingFilteredItems() override;
+    void SetFilterText(const std::string& s) override;
 
 	// Generated message map functions
 	virtual BOOL OnInitDialog();

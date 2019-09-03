@@ -168,16 +168,16 @@ string MetaPath::GetFullPath(Item& item)
     return s;
 }
 
-unique_ptr<FSReader> MetaPath::GetContentReader(FSReader::QueueTrigger t, bool recurse) const
+unique_ptr<FSReader> MetaPath::GetContentReader(FSReader::QueueTrigger t, bool recurse, UserFeedback& uf) const
 {
     switch (pathType)
     {
-    case TopShelf: return make_unique<TopShelfReader>(t, recurse);
-    case LocalFS: return NewLocalFSReader(localPath, t, recurse);
-    case LocalVolumes: return make_unique<LocalVolumeReader>(t, recurse);
-    case MegaAccount: return make_unique<MegaAccountReader>(masp, t, recurse);
-    case MegaFS: return make_unique<MegaFSReader>(masp, mnode.copy(), t, recurse);
-    case CommandHistory: return make_unique<CommandHistoryReader>(t);
+    case TopShelf: return make_unique<TopShelfReader>(t, recurse, uf);
+    case LocalFS: return NewLocalFSReader(localPath, t, recurse, uf);
+    case LocalVolumes: return make_unique<LocalVolumeReader>(t, recurse, uf);
+    case MegaAccount: return make_unique<MegaAccountReader>(masp, t, recurse, uf);
+    case MegaFS: return make_unique<MegaFSReader>(masp, mnode.copy(), t, recurse, uf);
+    case CommandHistory: return make_unique<CommandHistoryReader>(t, uf);
     default: assert(false);
     }
     return nullptr;

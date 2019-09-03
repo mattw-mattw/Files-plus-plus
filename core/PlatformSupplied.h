@@ -16,7 +16,7 @@ void AddMEGAAccount();
 void AddMEGAFolderLink();
 void RemoveMEGAAccount(std::shared_ptr<m::MegaApi>);
 
-std::unique_ptr<FSReader> NewLocalFSReader(const fs::path& p, FSReader::QueueTrigger t, bool recurse);
+std::unique_ptr<FSReader> NewLocalFSReader(const fs::path& p, FSReader::QueueTrigger t, bool recurse, UserFeedback& uf);
 
 bool LocalUserCrypt(std::string& data, bool encrypt);
 
@@ -24,3 +24,5 @@ std::string PlatformLocalUNCPrefix();
 std::string PlatformMegaUNCPrefix(m::MegaApi*);
 
 bool PutStringToClipboard(const std::string& copyString);
+
+void WaitMillisec(unsigned n);
