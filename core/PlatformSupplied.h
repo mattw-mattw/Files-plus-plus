@@ -14,7 +14,7 @@ bool QueryUserOkCancel(const std::string& message);
 
 void AddMEGAAccount();
 void AddMEGAFolderLink();
-void RemoveMEGAAccount(std::shared_ptr<m::MegaApi>);
+void RemoveMEGAAccount(ApiPtr);
 
 std::unique_ptr<FSReader> NewLocalFSReader(const fs::path& p, FSReader::QueueTrigger t, bool recurse, UserFeedback& uf);
 

@@ -45,7 +45,7 @@ void FSReader::OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& 
     ReportError("This view can't accept files, sorry");
 }
 
-void FSReader::OnDragDroppedMEGAItems(ApiPtr masp, const deque<unique_ptr<m::MegaNode>>& nodes)
+void FSReader::OnDragDroppedMEGAItems(OwningApiPtr masp, const deque<unique_ptr<m::MegaNode>>& nodes)
 {
     ReportError("This view can't accept files, sorry");
 }
@@ -123,7 +123,7 @@ auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> M
     {
         if (auto account = dynamic_cast<ItemMegaAccount*>((*selectedItems)[0]))
         {
-            ma.actions.emplace_back("Log Out and remove local cache", [masp = account->masp]() { g_mega->logoutremove(masp); });
+            ma.actions.emplace_back("Log Out and remove local cache", [mawp = account->mawp]() { if (auto masp = mawp.lock()) g_mega->logoutremove(masp); });
         }
     }
     else if (selectedItems->empty())
@@ -134,9 +134,9 @@ auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> M
     return ma;
 };
 
-MegaAccountReader::MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r, UserFeedback& uf)
+MegaAccountReader::MegaAccountReader(ApiPtr p, QueueTrigger t, bool r, UserFeedback& uf)
     : FSReader(t, r, uf)
-    , masp(p)
+    , mawp(p)
     , workerthread([this]() { Threaded(); })
 {
 }
@@ -154,6 +154,11 @@ auto MegaAccountReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> select
 
 void MegaAccountReader::Threaded()
 {
+    // todo: make sure readers are destroyed so shared ptr is released
+
+    auto masp = mawp.lock();
+    if (!masp) return;
+
     unique_ptr<m::MegaNode> root(masp->getRootNode());
     unique_ptr<m::MegaNode> inbox(masp->getInboxNode());
     unique_ptr<m::MegaNode> rubbish(masp->getRubbishNode());
@@ -175,7 +180,7 @@ void MegaAccountReader::Threaded()
     Send();
 }
 
-MegaFSReader::MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r, UserFeedback& uf)
+MegaFSReader::MegaFSReader(ApiPtr p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r, UserFeedback& uf)
     : FSReader(t, r, uf)
     , masp(p)
     , mnode(move(n))
@@ -238,7 +243,7 @@ auto MegaFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> Men
     return ma;
 };
 
-void MegaFSReader::OnDragDroppedMEGAItems(ApiPtr source_masp, const deque<unique_ptr<m::MegaNode>>& nodes)
+void MegaFSReader::OnDragDroppedMEGAItems(OwningApiPtr source_masp, const deque<unique_ptr<m::MegaNode>>& nodes)
 {
     OwnString targetPath(masp->getNodePath(mnode.get()));
     targetPath += "/";

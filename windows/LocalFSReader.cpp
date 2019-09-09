@@ -303,7 +303,7 @@ void LocalFSReader::Threaded()
 }
 
 
-void LocalFSReader::OnDragDroppedMEGAItems(ApiPtr masp, const deque<unique_ptr<m::MegaNode>>& nodes)
+void LocalFSReader::OnDragDroppedMEGAItems(OwningApiPtr masp, const deque<unique_ptr<m::MegaNode>>& nodes)
 {
     for (auto& n : nodes)
     {

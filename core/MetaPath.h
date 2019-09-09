@@ -10,14 +10,14 @@ struct Item;
 struct Account
 {
     std::filesystem::path cacheFolder;
-    ApiPtr masp;
-    Account(const std::filesystem::path& p, ApiPtr ap) : cacheFolder(p), masp(ap) {}
+    OwningApiPtr masp;
+    Account(const std::filesystem::path& p, OwningApiPtr ap) : cacheFolder(p), masp(ap) {}
 };
 
 struct PublicFolder : Account
 {
     std::string folderLink;
-    PublicFolder(const std::string& link, const std::filesystem::path& p, ApiPtr ap) : Account(p, ap), folderLink(link) {}
+    PublicFolder(const std::string& link, const std::filesystem::path& p, OwningApiPtr masp) : Account(p, masp), folderLink(link) {}
     ~PublicFolder() {}
 };
 
@@ -30,7 +30,7 @@ class MetaPath
 	enum PathType { None, TopShelf, LocalVolumes, LocalFS, MegaAccount, MegaFS, CommandHistory};
 	PathType pathType = None;
 	std::filesystem::path localPath;
-	ApiPtr masp;
+	ApiPtr mawp;
 	copy_ptr<m::MegaNode> mnode;
 public:
 	bool operator==(const MetaPath& o) const;
@@ -55,7 +55,7 @@ public:
     static MetaPath deserialize(const std::string&);
 
     operator bool() { return pathType != None; }
-    ApiPtr Account();
+    OwningApiPtr Account();
 };
 
 

@@ -779,7 +779,7 @@ void CFilesPPDlg::OnDropFiles(HDROP hDropInfo)
     std::string megaprefix, initialmegaprefix;
     m::MegaApi::utf8ToUtf16(PlatformMegaUNCPrefix(nullptr).c_str(), &initialmegaprefix);
     std::deque<std::string> megapaths;
-    std::shared_ptr<m::MegaApi> source_masp;
+    OwningApiPtr source_masp;
 
     for (int j = 0; j < nCntFiles; j++)
     {
@@ -1102,36 +1102,38 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
         CMenu m;
         m.CreatePopupMenu();
         auto favourites = g_mega->favourites.copy();
-        ApiPtr currAcc = nullptr;
+        OwningApiPtr currAcc = nullptr;
         MenuActions ma;
         for (unsigned i = 0; i < favourites.size(); ++i)
         {
-            
-            if (favourites[i].Account() != currAcc)
+            if (OwningApiPtr test = favourites[i].Account())
             {
-                currAcc = favourites[i].Account();
-                ma.actions.push_back(MenuActions::MenuItem{ currAcc ? OwnString(currAcc->getMyEmail()) : string("<Local>") , nullptr, true });
-            }
-            ma.actions.push_back(MenuActions::MenuItem{ favourites[i].u8DisplayPath() , [thisfavourite = favourites[i], this]()
+                if (test != currAcc)
                 {
-                    if (GetKeyState(VK_SHIFT) & 0x8000)
+                    currAcc = test;
+                    ma.actions.push_back(MenuActions::MenuItem{ currAcc ? OwnString(currAcc->getMyEmail()) : string("<Local>") , nullptr, true });
+                }
+                ma.actions.push_back(MenuActions::MenuItem{ favourites[i].u8DisplayPath() ,[thisfavourite = favourites[i], this]()
                     {
-                        // make a new top level window (complete with its own gui thread) to load subdir 
-                        auto t = make_unique<CFilesPPDlgThread>();
-                        t->dlg.m_pathCtl.metaPath = thisfavourite;
-                        t->m_bAutoDelete = true;
-                        GetWindowRect(t->dlg.originatorWindowRect);
-                        if (!t->CreateThread()) AfxMessageBox(_T("Thread creation failed"));
-                        else t.release();
-                    }
-                    else
-                    {
-                        m_pathCtl.PrepareNavigateBack();
-                        m_pathCtl.metaPath = thisfavourite;
-                        LoadContent(true);
-                    }
+                        if (GetKeyState(VK_SHIFT) & 0x8000)
+                        {
+                            // make a new top level window (complete with its own gui thread) to load subdir 
+                            auto t = make_unique<CFilesPPDlgThread>();
+                            t->dlg.m_pathCtl.metaPath = thisfavourite;
+                            t->m_bAutoDelete = true;
+                            GetWindowRect(t->dlg.originatorWindowRect);
+                            if (!t->CreateThread()) AfxMessageBox(_T("Thread creation failed"));
+                            else t.release();
+                        }
+                        else
+                        {
+                            m_pathCtl.PrepareNavigateBack();
+                            m_pathCtl.metaPath = thisfavourite;
+                            LoadContent(true);
+                        }
 
-                } });
+                    } });
+            }
         }
         CRect r;
         m_spinCtrl.GetWindowRect(r);

@@ -25,7 +25,7 @@ public:
 
 private:
 
-    void OnDragDroppedMEGAItems(ApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
+    void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
     void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths) override;
 
 

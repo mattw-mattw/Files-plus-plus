@@ -60,7 +60,7 @@ class PathCtrl : public CEdit
 	DECLARE_MESSAGE_MAP()
 	void OnDropFiles(HDROP hDropInfo);
 
-	std::vector<std::shared_ptr<m::MegaApi>> megaAccounts;
+	std::vector<ApiPtr> megaAccounts;
 
 	std::deque<MetaPath> historyBack, historyForward;
 

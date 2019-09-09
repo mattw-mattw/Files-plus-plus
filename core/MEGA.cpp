@@ -94,12 +94,12 @@ void MEGA::saveFavourites(AccountPtr macc)
     for (auto& f : favourites.copy()) { string s; if (getAccount(f.Account()) == macc && f.serialize(s)) faves << s << std::endl; }
 }
 
-auto MEGA::findMegaApi(uint64_t dragdroptoken) -> ApiPtr
+auto MEGA::findMegaApi(uint64_t dragdroptoken) -> OwningApiPtr
 {
     std::lock_guard g(m);
     for (auto& a : megaAccounts) { if (reinterpret_cast<uint64_t>(a->masp.get()) == dragdroptoken) return a->masp; }
     for (auto& a : megaFolderLinks) { if (reinterpret_cast<uint64_t>(a->masp.get()) == dragdroptoken) return a->masp; }
-    return nullptr;
+    return {};
 }
 
 void MEGA::AddMRequest(ApiPtr masp, shared_ptr<MRequest>&& mrsp)
@@ -201,7 +201,7 @@ void MEGA::addFolder(FolderPtr& a) {
     ReportError("Failed to encrypt or write folder link");
 }
 
-void MEGA::logoutremove(ApiPtr masp)
+void MEGA::logoutremove(OwningApiPtr masp)
 {
 	if (masp->isLoggedIn())
 	{
@@ -216,7 +216,7 @@ void MEGA::logoutremove(ApiPtr masp)
 	}
 }
 
-void MEGA::deletecache(ApiPtr masp)
+void MEGA::deletecache(OwningApiPtr masp)
 {
 	std::lock_guard g(m);
     for (auto it = megaAccounts.begin(); it != megaAccounts.end(); ++it)
@@ -264,17 +264,17 @@ std::string MEGA::FromBase64(const std::string& s)
     return ret;
 }
 
-MRequest::MRequest(const ApiPtr& ap, const std::string& a)
+MRequest::MRequest(const OwningApiPtr& masp, const std::string& a)
     : OneTimeListener(nullptr)
-    , masp(ap)
+    , mawp(masp)
     , action(a)
 {
     g_mega->AddMRequest(masp, std::shared_ptr<MRequest>(this));
 }
 
-MRequest::MRequest(const ApiPtr& ap, const std::string& a, std::function<void(m::MegaRequest* request, m::MegaError* e)> f) 
+MRequest::MRequest(const OwningApiPtr& masp, const std::string& a, std::function<void(m::MegaRequest* request, m::MegaError* e)> f) 
     : OneTimeListener(f) 
-    , masp(ap)
+    , mawp(masp)
     , action(a)
 {
     g_mega->AddMRequest(masp, std::shared_ptr<MRequest>(this));

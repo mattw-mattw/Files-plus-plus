@@ -28,7 +28,7 @@ struct OneTimeListener : public m::MegaRequestListener
 
 class MRequest : public OneTimeListener, public std::enable_shared_from_this<MRequest>
 {
-    ApiPtr masp;
+    ApiPtr mawp;
     std::mutex m;
     std::string action;
     std::string state;
@@ -56,9 +56,9 @@ class MRequest : public OneTimeListener, public std::enable_shared_from_this<MRe
     }
 
 public:
-    MRequest(const ApiPtr& ap, const std::string& a);
+    MRequest(const OwningApiPtr& ap, const std::string& a);
 
-    MRequest(const ApiPtr& ap, const std::string& a, std::function<void(m::MegaRequest* request, m::MegaError* e)> f);
+    MRequest(const OwningApiPtr& ap, const std::string& a, std::function<void(m::MegaRequest* request, m::MegaError* e)> f);
 
     std::string getAction()
     {
@@ -81,7 +81,7 @@ struct MEGA
     std::vector<AccountPtr> accounts() { std::lock_guard g(m); return megaAccounts; }
     std::vector<FolderPtr> folderLinks() { std::lock_guard g(m); return megaFolderLinks; }
 
-    AccountPtr getAccount(ApiPtr a) { std::lock_guard g(m); for (auto& p : megaAccounts) if (p->masp == a) return p; return nullptr; }
+    AccountPtr getAccount(ApiPtr a) { std::lock_guard g(m); for (auto& p : megaAccounts) if (p->masp == a.lock()) return p; return {}; }
 
     std::atomic<int> accountsUpdateCount = 0;
     std::atomic<int> folderLinksUpdateCount = 0;
@@ -93,10 +93,10 @@ struct MEGA
     FolderPtr makeTempFolder();
     void addAccount(AccountPtr&);
     void addFolder(FolderPtr&);
-    void logoutremove(ApiPtr masp);
-	void deletecache(ApiPtr masp);
+    void logoutremove(OwningApiPtr masp);
+	void deletecache(OwningApiPtr masp);
 
-    ApiPtr findMegaApi(uint64_t dragdroptoken);
+    OwningApiPtr findMegaApi(uint64_t dragdroptoken);
 
     void AddMRequest(ApiPtr masp, std::shared_ptr<MRequest>&&);
     std::deque<std::shared_ptr<MRequest>> getRequestHistory();

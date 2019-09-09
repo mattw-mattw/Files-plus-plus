@@ -50,8 +50,8 @@ struct ItemError : public Item
 
 struct ItemMegaAccount : public Item
 {
-    ItemMegaAccount(std::string n, std::shared_ptr<m::MegaApi> p) : Item(std::move(n)), masp(p) {}
-    std::shared_ptr<m::MegaApi> masp;
+    ItemMegaAccount(std::string n, ApiPtr p) : Item(std::move(n)), mawp(p) {}
+    ApiPtr mawp;
 };
 
 struct ItemMegaNode : public Item

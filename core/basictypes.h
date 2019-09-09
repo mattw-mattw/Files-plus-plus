@@ -16,7 +16,8 @@ namespace fs = std::filesystem;
 #include <megaapi.h>
 namespace m = ::mega;
 
-typedef std::shared_ptr<m::MegaApi> ApiPtr;
+typedef std::shared_ptr<m::MegaApi> OwningApiPtr;
+typedef std::weak_ptr<m::MegaApi> ApiPtr;
 
 template<class T> 
 struct copy_ptr : public std::unique_ptr<T>

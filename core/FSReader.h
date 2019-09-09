@@ -37,7 +37,7 @@ struct FSReader
 	// gui thread functions
     virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) { return MenuActions(); }
     virtual void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths);
-    virtual void OnDragDroppedMEGAItems(ApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes);
+    virtual void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes);
 
 protected:
 	bool recurse = false;
@@ -86,7 +86,7 @@ private:
 
 struct MegaAccountReader : public FSReader
 {
-	MegaAccountReader(std::shared_ptr<m::MegaApi> p, QueueTrigger t, bool r, UserFeedback& uf);
+	MegaAccountReader(ApiPtr p, QueueTrigger t, bool r, UserFeedback& uf);
 	~MegaAccountReader();
 
 	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
@@ -94,7 +94,7 @@ struct MegaAccountReader : public FSReader
 private:
 	void Threaded();
 
-	std::shared_ptr<m::MegaApi> masp;
+	ApiPtr mawp;
 	bool cancelling = false;
 	std::thread workerthread;
 };
@@ -111,19 +111,19 @@ struct NodeUpdateListener : public m::MegaGlobalListener
 
 struct MegaFSReader : public FSReader
 {
-	MegaFSReader(std::shared_ptr<m::MegaApi> p, std::unique_ptr<m::MegaNode>, QueueTrigger t, bool r, UserFeedback& uf);
+	MegaFSReader(ApiPtr p, std::unique_ptr<m::MegaNode>, QueueTrigger t, bool r, UserFeedback& uf);
 	~MegaFSReader();
 
 private:
 	void Threaded();
     void RecursiveRead(m::MegaNode& mnode, const std::string& basepath);
     void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths) override;
-    void OnDragDroppedMEGAItems(ApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
+    void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
     auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems)->MenuActions override;
 
 
 	NodeUpdateListener listener;
-	std::shared_ptr<m::MegaApi> masp;
+	OwningApiPtr masp;  // TODO: make sure we destory the reader on window close
 	std::unique_ptr<m::MegaNode> mnode;
     std::set<::mega::MegaHandle> nodes_present;
 	bool cancelling = false;
