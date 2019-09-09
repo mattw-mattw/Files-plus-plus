@@ -354,7 +354,7 @@ void MegaFSReader::Threaded()
         while (!cancelling && !reload_needed)
         {
             unique_ptr<m::MegaNodeList> nodes;
-            if (listener.nq.pop(nodes))
+            if (listener.nq.pop(nodes, true))
             {
                 if (cancelling) break;
                 if (!nodes)

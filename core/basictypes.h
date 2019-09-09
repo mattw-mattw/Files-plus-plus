@@ -44,10 +44,11 @@ public:
 		queue.emplace_back(move(t));
 		cv.notify_one();
 	}
-	bool pop(T& value)
+	bool pop(T& value, bool wait)
 	{
 		std::unique_lock<mutex> g(m);
-		if (queue.empty()) return false;
+        if (wait && queue.empty()) cv.wait(g);
+        if (queue.empty()) return false;
 		value = std::move(queue.front());
 		queue.pop_front();
 		return true;

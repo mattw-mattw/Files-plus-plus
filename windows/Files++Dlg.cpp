@@ -437,7 +437,7 @@ LRESULT CFilesPPDlg::OnContentUpdate(WPARAM wParam, LPARAM lParam)
 {
     
     FSReader::Entry entry;
-    while (activeReader->q.pop(entry))
+    while (activeReader->q.pop(entry, false))
     {
         switch (entry.action)
         {
