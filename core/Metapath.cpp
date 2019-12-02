@@ -26,6 +26,11 @@ bool MetaPath::Ascend()
             }
             return true;
         }
+        case Playlist: {
+            localPath = localPath.parent_path();
+            pathType = LocalFS;
+            return true;
+        }
         case LocalVolumes: {
             pathType = TopShelf;
             return true;
@@ -94,6 +99,18 @@ bool MetaPath::Descend(const Item& item)
             localPath = newpath;
             return true;
         }
+        if (auto p = dynamic_cast<const ItemLocalFS*>(&item))
+        {
+            if (p->u8Name.size() > 9 && p->u8Name.substr(p->u8Name.size() - 9) == ".playlist")
+            {
+                pathType = Playlist;
+                localPath = newpath;
+                return true;
+            }
+        }
+        break;
+    }
+    case Playlist: {
         break;
     }
     case LocalVolumes: {
@@ -139,7 +156,7 @@ void MetaPath::SetLocalPath(const fs::path& p)
 
 bool MetaPath::GetLocalPath(std::filesystem::path& p) const
 {
-    if (pathType == LocalFS)
+    if (pathType == LocalFS || pathType == Playlist)
     {
         p = localPath;
         return true;
@@ -170,10 +187,10 @@ string MetaPath::GetFullPath(Item& item)
     string s;
     switch (pathType)
     {
-    case LocalFS: s = (localPath / fs::u8path(item.u8Name)).u8string(); 
-                break;
+    case LocalFS: s = (localPath / fs::u8path(item.u8Name)).u8string();
+        break;
 
-    case MegaFS: if (auto p = dynamic_cast<ItemMegaNode*>(&item)) 
+    case MegaFS: if (auto p = dynamic_cast<ItemMegaNode*>(&item))
                     if (auto masp = mawp.lock())
                         s = masp->getNodePath(p->mnode.get());  
                 break;
@@ -187,6 +204,7 @@ unique_ptr<FSReader> MetaPath::GetContentReader(FSReader::QueueTrigger t, bool r
     {
     case TopShelf: return make_unique<TopShelfReader>(t, recurse, uf);
     case LocalFS: return NewLocalFSReader(localPath, t, recurse, uf);
+    case Playlist: return make_unique<PlaylistReader>(localPath, t, recurse, uf);
     case LocalVolumes: return make_unique<LocalVolumeReader>(t, recurse, uf);
     case MegaAccount: if (auto masp = mawp.lock()) return make_unique<MegaAccountReader>(masp, t, recurse, uf);
     case MegaFS: if (auto masp = mawp.lock()) return make_unique<MegaFSReader>(masp, mnode.copy(), t, recurse, uf);
@@ -202,6 +220,7 @@ std::string MetaPath::u8DisplayPath() const
     {
     case TopShelf: return "<Top Shelf>";
     case LocalFS: return localPath.u8string();
+    case Playlist: return localPath.u8string();
     case LocalVolumes: return "<Local Volumes>";
     case MegaAccount: {
         if (auto masp = mawp.lock())
@@ -227,6 +246,7 @@ bool MetaPath::operator==(const MetaPath& o) const
     {
     case TopShelf: return true;
     case LocalFS: return localPath == o.localPath;
+    case Playlist: return localPath == o.localPath;
     case LocalVolumes: return true;
     case MegaAccount: return mawp.lock() == o.mawp.lock();
     case MegaFS: return mawp.lock() == o.mawp.lock() && mnode->getHandle() == o.mnode->getHandle();
@@ -255,6 +275,7 @@ OwningApiPtr MetaPath::Account()
     {
     case TopShelf: 
     case LocalFS: 
+    case Playlist:
     case LocalVolumes:  return {};
     case MegaAccount:
     case MegaFS: return mawp.lock();
@@ -272,6 +293,10 @@ bool MetaPath::serialize(std::string& s)
         }
         case LocalFS: {
             s = "LocalFS/" + MEGA::ToBase64(localPath.u8string());
+            return true;
+        }
+        case Playlist: {
+            s = "Playlist/" + MEGA::ToBase64(localPath.u8string());
             return true;
         }
         case LocalVolumes: {
@@ -309,6 +334,12 @@ MetaPath MetaPath::deserialize(const std::string& s)
     {
         mp.pathType = LocalFS;
         mp.localPath = MEGA::FromBase64(s.substr(8));
+        return mp;
+    }
+    if (s.size() >= 9 && s.substr(0, 9) == "Playlist/")
+    {
+        mp.pathType = Playlist;
+        mp.localPath = MEGA::FromBase64(s.substr(9));
         return mp;
     }
     if (s == "LocalVolumes")

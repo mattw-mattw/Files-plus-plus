@@ -598,8 +598,8 @@ void CFilesPPDlg::OnBnClickedButton1()
     auto tmp = m_pathCtl.metaPath;
     if (tmp.Ascend())
     {
-        m_pathCtl.metaPath = tmp;
         m_pathCtl.PrepareNavigateBack();
+        m_pathCtl.metaPath = tmp;
         LoadContent(true);
     }
 }
@@ -881,6 +881,33 @@ void CFilesPPDlg::OnDropFiles(HDROP hDropInfo)
     }
 }
 
+void CFilesPPDlg::SavePlaylist()
+{
+    fs::path path;
+    if (m_pathCtl.metaPath.GetLocalPath(path))
+    {
+        ofstream outfile(path);
+        outfile << "[";
+        for (auto& i : items)
+        {
+            if (auto p = dynamic_cast<ItemMegaNode*>(i.get()))
+            {
+                outfile << "{\"h\":\"";
+                outfile << OwnStr(p->mnode->getBase64Handle(), true);
+                outfile << "\"}";
+            }
+        }
+        outfile << "]";
+        outfile.flush();
+        if (outfile)
+        {
+            ReportError("Playlist saved successfully");
+            return;
+        }
+    }
+    ReportError("Could not save Playlist");
+}
+
 enum { MENU_COPYNAMES = 1, MENU_COPYPATHS, MENU_COPYNAMESQUOTED, MENU_COPYPATHSQUOTED, MENU_SUBSEQUENT };
 
 void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
@@ -912,6 +939,14 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 
         MenuActions ma;
         if (activeReader) ma = activeReader->GetMenuActions(selectedItems);
+        if (m_pathCtl.metaPath.getPathType() == MetaPath::Playlist)
+        {
+            ma.actions.emplace_back("Save Playlist", [this]()
+            {
+                SavePlaylist();
+            });
+        }
+
 
         ClientToScreen(&pNMItemActivate->ptAction);
         auto result = ExecMenu(contextMenu, ma, MENU_SUBSEQUENT, pNMItemActivate->ptAction, this);
@@ -1106,34 +1141,32 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
         MenuActions ma;
         for (unsigned i = 0; i < favourites.size(); ++i)
         {
-            if (OwningApiPtr test = favourites[i].Account())
+            OwningApiPtr test = favourites[i].Account();
+            if (test != currAcc)
             {
-                if (test != currAcc)
-                {
-                    currAcc = test;
-                    ma.actions.push_back(MenuActions::MenuItem{ currAcc ? OwnString(currAcc->getMyEmail()) : string("<Local>") , nullptr, true });
-                }
-                ma.actions.push_back(MenuActions::MenuItem{ favourites[i].u8DisplayPath() ,[thisfavourite = favourites[i], this]()
-                    {
-                        if (GetKeyState(VK_SHIFT) & 0x8000)
-                        {
-                            // make a new top level window (complete with its own gui thread) to load subdir 
-                            auto t = make_unique<CFilesPPDlgThread>();
-                            t->dlg.m_pathCtl.metaPath = thisfavourite;
-                            t->m_bAutoDelete = true;
-                            GetWindowRect(t->dlg.originatorWindowRect);
-                            if (!t->CreateThread()) AfxMessageBox(_T("Thread creation failed"));
-                            else t.release();
-                        }
-                        else
-                        {
-                            m_pathCtl.PrepareNavigateBack();
-                            m_pathCtl.metaPath = thisfavourite;
-                            LoadContent(true);
-                        }
-
-                    } });
+                currAcc = test;
+                ma.actions.push_back(MenuActions::MenuItem{ currAcc ? OwnString(currAcc->getMyEmail()) : string("<Local>") , nullptr, true });
             }
+            ma.actions.push_back(MenuActions::MenuItem{ favourites[i].u8DisplayPath() ,[thisfavourite = favourites[i], this]()
+                {
+                    if (GetKeyState(VK_SHIFT) & 0x8000)
+                    {
+                        // make a new top level window (complete with its own gui thread) to load subdir 
+                        auto t = make_unique<CFilesPPDlgThread>();
+                        t->dlg.m_pathCtl.metaPath = thisfavourite;
+                        t->m_bAutoDelete = true;
+                        GetWindowRect(t->dlg.originatorWindowRect);
+                        if (!t->CreateThread()) AfxMessageBox(_T("Thread creation failed"));
+                        else t.release();
+                    }
+                    else
+                    {
+                        m_pathCtl.PrepareNavigateBack();
+                        m_pathCtl.metaPath = thisfavourite;
+                        LoadContent(true);
+                    }
+
+                } });
         }
         CRect r;
         m_spinCtrl.GetWindowRect(r);

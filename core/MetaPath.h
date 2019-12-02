@@ -25,14 +25,10 @@ typedef std::shared_ptr<Account> AccountPtr;
 typedef std::shared_ptr<PublicFolder> FolderPtr;
 
 
-class MetaPath
+struct MetaPath
 {
-	enum PathType { None, TopShelf, LocalVolumes, LocalFS, MegaAccount, MegaFS, CommandHistory};
-	PathType pathType = None;
-	std::filesystem::path localPath;
-	ApiPtr mawp;
-	copy_ptr<m::MegaNode> mnode;
-public:
+    enum PathType { None, TopShelf, LocalVolumes, LocalFS, MegaAccount, MegaFS, CommandHistory, Playlist };
+
 	bool operator==(const MetaPath& o) const;
 
 	bool Ascend();
@@ -55,7 +51,14 @@ public:
     static MetaPath deserialize(const std::string&);
 
     operator bool() { return pathType != None; }
+    PathType getPathType() { return pathType; }
     OwningApiPtr Account();
+
+private:
+    PathType pathType = None;
+    std::filesystem::path localPath;
+    ApiPtr mawp;
+    copy_ptr<m::MegaNode> mnode;
 };
 
 

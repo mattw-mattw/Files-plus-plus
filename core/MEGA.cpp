@@ -77,6 +77,22 @@ MEGA::~MEGA()
 
 }
 
+std::unique_ptr<m::MegaNode> MEGA::findNode(m::MegaHandle h)
+{
+    std::lock_guard g(m);
+    for (auto& a : megaAccounts) 
+    { 
+        auto p = a->masp->getNodeByHandle(h);
+        if (p) return std::unique_ptr<m::MegaNode>(p);
+    }
+    for (auto& a : megaFolderLinks) 
+    { 
+        auto p = a->masp->getNodeByHandle(h);
+        if (p) return std::unique_ptr<m::MegaNode>(p);
+    }
+    return nullptr;
+}
+
 void MEGA::loadFavourites(AccountPtr macc)
 {
     ifstream faves((macc ? macc->cacheFolder : BasePath()) / "favourites");

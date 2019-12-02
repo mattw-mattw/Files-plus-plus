@@ -113,6 +113,8 @@ public:
 
 	BOOL CanExit();
 
+    void SavePlaylist();
+
     void SetUserFeedbackCStr(const char* s) override;
     void ClearFilteredItems() override;
     void AddFilteredItem(Item*) override;

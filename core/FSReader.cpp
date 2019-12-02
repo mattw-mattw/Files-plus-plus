@@ -4,6 +4,8 @@
 #include "PlatformSupplied.h"
 #include "MEGA.h"
 #include "Item.h"
+#include <fstream>
+#include <mega/json.h>
 
 using namespace std;
 
@@ -69,20 +71,20 @@ void TopShelfReader::Threaded()
     {
         int fluc = g_mega->accountsUpdateCount;
 
-        Queue(NEWITEM, make_unique<Item>("<Local Volumes>"));
+        Queue(NEWITEM, std::make_unique<Item>("<Local Volumes>"));
         auto megaAccounts = g_mega->accounts();
         for (auto& p : megaAccounts)
         {
             OwnString email(p->masp->getMyEmail());
-            Queue(NEWITEM, make_unique<ItemMegaAccount>(email.empty() ? string("<loading>") : email, p->masp));
+            Queue(NEWITEM, std::make_unique<ItemMegaAccount>(email.empty() ? string("<loading>") : email, p->masp));
         }
         auto megaFolders = g_mega->folderLinks();
         for (auto& p : megaFolders)
         {
-            Queue(NEWITEM, make_unique<ItemMegaAccount>(p->folderLink, p->masp));
+            Queue(NEWITEM, std::make_unique<ItemMegaAccount>(p->folderLink, p->masp));
         }
         Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-        Queue(NEWITEM, make_unique<Item>("<MEGA Command History>"));
+        Queue(NEWITEM, std::make_unique<Item>("<MEGA Command History>"));
         Send();
 
         unique_lock<mutex> g(g_mega->updateCVMutex);
@@ -163,16 +165,16 @@ void MegaAccountReader::Threaded()
     unique_ptr<m::MegaNode> inbox(masp->getInboxNode());
     unique_ptr<m::MegaNode> rubbish(masp->getRubbishNode());
 
-    if (root) Queue(NEWITEM, make_unique<ItemMegaNode>(root->getName(), move(root)));
-    if (inbox) Queue(NEWITEM, make_unique<ItemMegaNode>(inbox->getName(), move(inbox)));
-    if (rubbish) Queue(NEWITEM, make_unique<ItemMegaNode>(rubbish->getName(), move(rubbish)));
+    if (root) Queue(NEWITEM, std::make_unique<ItemMegaNode>(root->getName(), move(root)));
+    if (inbox) Queue(NEWITEM, std::make_unique<ItemMegaNode>(inbox->getName(), move(inbox)));
+    if (rubbish) Queue(NEWITEM, std::make_unique<ItemMegaNode>(rubbish->getName(), move(rubbish)));
 
     unique_ptr<m::MegaNodeList> inshares(masp->getInShares());
     if (inshares)
     {
         for (int i = 0; i < inshares->size(); ++i)
         {
-            Queue(NEWITEM, make_unique<ItemMegaInshare>(std::unique_ptr<m::MegaNode>(inshares->get(i)->copy()), *masp, -1, true));
+            Queue(NEWITEM, std::make_unique<ItemMegaInshare>(std::unique_ptr<m::MegaNode>(inshares->get(i)->copy()), *masp, -1, true));
         }
     }
 
@@ -314,7 +316,7 @@ void MegaFSReader::RecursiveRead(m::MegaNode& mnode, const string& basepath)
             auto node = folders->get(i);
             nodes_present.insert(node->getHandle());
             OwnStr path(masp->getNodePath(node), true);
-            Queue(NEWITEM, make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
+            Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
             if (recurse) RecursiveRead(*node, basepath);
         }
         for (int i = 0; i < files->size(); ++i)
@@ -322,7 +324,7 @@ void MegaFSReader::RecursiveRead(m::MegaNode& mnode, const string& basepath)
             auto node = files->get(i);
             nodes_present.insert(node->getHandle());
             OwnStr path(masp->getNodePath(node), true);
-            Queue(NEWITEM, make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
+            Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
         }
     }
 }
@@ -376,7 +378,7 @@ void MegaFSReader::Threaded()
                             {
                                 if (nodes_present.find(n->getHandle()) != nodes_present.end())
                                 {
-                                    Queue(DELETEDITEM, make_unique<ItemMegaNode>(n->getName(), std::unique_ptr<m::MegaNode>(n->copy())));
+                                    Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(n->getName(), std::unique_ptr<m::MegaNode>(n->copy())));
                                     nodes_present.erase(n->getHandle());
                                 }
                             }
@@ -385,15 +387,15 @@ void MegaFSReader::Threaded()
                                 OwnStr path(masp->getNodePath(n), true);
                                 string name(removebase(path, basepath));
                                 nodes_present.insert(n->getHandle());
-                                Queue(NEWITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                                Queue(NEWITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
 
                             }
                             else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_ATTRIBUTES)) // could be renamed
                             {
                                 OwnStr path(masp->getNodePath(n), true);
                                 string name(removebase(path, basepath));
-                                Queue(DELETEDITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
-                                Queue(NEWITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                                Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                                Queue(NEWITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
                             }
                         }
                         else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_PARENT))
@@ -402,7 +404,7 @@ void MegaFSReader::Threaded()
                             {
                                 OwnStr path(masp->getNodePath(n), true);
                                 string name(removebase(path, basepath));
-                                Queue(DELETEDITEM, make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                                Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
                                 nodes_present.erase(n->getHandle());
                             }
                         }
@@ -439,7 +441,97 @@ void CommandHistoryReader::Threaded()
     auto history = g_mega->getRequestHistory();
     for (auto& c : history)
     {
-        Queue(NEWITEM, make_unique<ItemCommand>(c));
+        Queue(NEWITEM, std::make_unique<ItemCommand>(c));
+    }
+
+    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    Send();
+}
+
+PlaylistReader::PlaylistReader(const std::filesystem::path& path, QueueTrigger t, bool r, UserFeedback& uf)
+    : FSReader(t, r, uf)
+    , fullFilePath(path)
+    , workerthread([this]() { Threaded(); })
+{
+}
+
+PlaylistReader::~PlaylistReader()
+{
+    cancelling = true;
+    workerthread.join();
+}
+
+auto PlaylistReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) -> MenuActions
+{
+    MenuActions ma;
+    //ma.actions.emplace_back("Save Playlist", [=, masp = masp]()
+    //{
+
+    //});
+    return ma;
+}
+
+void PlaylistReader::OnDragDroppedMEGAItems(OwningApiPtr source_masp, const deque<unique_ptr<m::MegaNode>>& nodes)
+{
+    for (auto& n : nodes)
+    {
+        Queue(NEWITEM, std::make_unique<ItemMegaNode>(string(n->getName()), std::unique_ptr<m::MegaNode>(n->copy())));
+    }
+    Send();
+}
+
+void PlaylistReader::Threaded()
+{
+    std::ifstream file(fullFilePath, ios::binary);    // bin becuase cross-platform
+
+    std::string content;
+    while (file && !file.eof())
+    {
+        auto c = file.get();
+        if (c != std::ifstream::traits_type::eof())
+        {
+            content.append(1, char(c));
+        }
+    }
+
+    if (!file && !file.eof())
+    {
+        Queue(FILE_ACTION_APP_ERROR, NULL);
+        return;
+    }
+
+    ::mega::JSON json;
+    json.pos = content.c_str();
+    if (json.enterarray())
+    {
+        for (;;)
+        {
+            if (json.enterobject())
+            {
+                ::mega::handle h = ::mega::UNDEF;
+                for (;;)
+                {
+                    switch (json.getnameid())
+                    {
+                    case 'h':
+                        h = json.gethandle();
+                        break;
+                    case EOO:
+                        if (auto p = g_mega->findNode(h))
+                        {
+                            Queue(NEWITEM, std::make_unique<ItemMegaNode>(string(p->getName()), std::move(p)));
+                        }
+                        goto breakInnerFor;
+                    default:
+                        json.storeobject();
+                    }
+
+                }
+                breakInnerFor: if (!json.leaveobject()) break;
+            }
+            else break;
+        }
+        json.leavearray();
     }
 
     Queue(FILE_ACTION_APP_READCOMPLETE, NULL);

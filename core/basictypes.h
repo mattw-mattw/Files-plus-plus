@@ -47,8 +47,11 @@ public:
 	bool pop(T& value, bool wait)
 	{
 		std::unique_lock<mutex> g(m);
-        if (wait && queue.empty()) cv.wait(g);
-        if (queue.empty()) return false;
+        if (queue.empty())
+        {
+            if (!wait) return false;
+            cv.wait(g, [this]() { return !queue.empty(); });
+        }
 		value = std::move(queue.front());
 		queue.pop_front();
 		return true;

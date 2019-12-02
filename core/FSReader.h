@@ -144,3 +144,20 @@ private:
     bool cancelling = false;
     std::thread workerthread;
 };
+
+struct PlaylistReader : public FSReader
+{
+    PlaylistReader(const std::filesystem::path&, QueueTrigger t, bool r, UserFeedback& uf);
+    ~PlaylistReader();
+
+    MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
+
+private:
+    void Threaded();
+    void OnDragDroppedMEGAItems(OwningApiPtr source_masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
+
+    std::filesystem::path fullFilePath;
+    bool cancelling = false;
+    std::thread workerthread;
+};
+

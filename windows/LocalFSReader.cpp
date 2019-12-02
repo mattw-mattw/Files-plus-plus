@@ -112,8 +112,7 @@ bool LocalFSReader::ReadDir(const fs::path& p, bool recurse, const fs::path& rec
     // read directory now
     try
     {
-        int insertPos = 0;
-        for (fs::directory_iterator i(p); i != fs::directory_iterator(); ++i, ++insertPos)
+        for (fs::directory_iterator i(p); i != fs::directory_iterator(); ++i)
         {
             fs::path relativename = recurseprefix / i->path().filename();
             if (i->is_directory())
@@ -128,12 +127,10 @@ bool LocalFSReader::ReadDir(const fs::path& p, bool recurse, const fs::path& rec
         }
         return true;
     }
-    catch (std::exception&)
+    catch (std::exception& e)
     {
-        //Queue(FILE_ACTION_APP_ERROR, unique_ptr<Item>(new ItemError("Error reading directory: " + string(e.what()))));
-        //AfxMessageBox(e.what(), IDOK);
-        //return false;
-        return true;
+        Queue(FILE_ACTION_APP_ERROR, unique_ptr<Item>(new ItemError("Error reading directory: " + string(e.what()))));
+        return false;
     }
 }
 
@@ -246,7 +243,7 @@ void LocalFSReader::Threaded()
     overlappedbuf.resize(48 * 1024);
     bool notifyOk = RequestChanges();
 
-    ReadDir(dir, recurse, "");
+    if (!ReadDir(dir, recurse, "")) return;
     Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
     Send();
 
