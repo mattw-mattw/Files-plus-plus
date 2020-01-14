@@ -7,27 +7,9 @@
 
 struct Item;
 
-struct Account
-{
-    std::filesystem::path cacheFolder;
-    OwningApiPtr masp;
-    Account(const std::filesystem::path& p, OwningApiPtr ap) : cacheFolder(p), masp(ap) {}
-};
-
-struct PublicFolder : Account
-{
-    std::string folderLink;
-    PublicFolder(const std::string& link, const std::filesystem::path& p, OwningApiPtr masp) : Account(p, masp), folderLink(link) {}
-    ~PublicFolder() {}
-};
-
-typedef std::shared_ptr<Account> AccountPtr;
-typedef std::shared_ptr<PublicFolder> FolderPtr;
-
-
 struct MetaPath
 {
-    enum PathType { None, TopShelf, LocalVolumes, LocalFS, MegaAccount, MegaFS, CommandHistory, Playlist };
+    enum PathType { None, TopShelf, LocalVolumes, LocalFS, MegaAccount, MegaChats, MegaChat, MegaFS, CommandHistory, Playlist };
 
 	bool operator==(const MetaPath& o) const;
 
@@ -52,12 +34,12 @@ struct MetaPath
 
     operator bool() { return pathType != None; }
     PathType getPathType() { return pathType; }
-    OwningApiPtr Account();
+    OwningAccountPtr Account();
 
 private:
     PathType pathType = None;
     std::filesystem::path localPath;
-    ApiPtr mawp;
+	WeakAccountPtr wap;
     copy_ptr<m::MegaNode> mnode;
 };
 

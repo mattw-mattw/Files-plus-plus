@@ -26,6 +26,20 @@ struct OneTimeListener : public m::MegaRequestListener
     }
 };
 
+
+struct OneTimeChatListener : public c::MegaChatRequestListener
+{
+    std::function<void(c::MegaChatRequest * request, c::MegaChatError * e)> fn;
+
+    OneTimeChatListener(std::function<void(c::MegaChatRequest * request, c::MegaChatError * e)> f) : fn(f) {}
+
+    void onRequestFinish(c::MegaChatApi* api, c::MegaChatRequest* request, c::MegaChatError* e) override
+    {
+        if (fn) fn(request, e);
+        delete this;
+    }
+};
+
 class MRequest : public OneTimeListener, public std::enable_shared_from_this<MRequest>
 {
     ApiPtr mawp;
@@ -78,10 +92,10 @@ struct MEGA
 	MEGA();
 	~MEGA();
 
-    std::vector<AccountPtr> accounts() { std::lock_guard g(m); return megaAccounts; }
-    std::vector<FolderPtr> folderLinks() { std::lock_guard g(m); return megaFolderLinks; }
+    std::vector<OwningAccountPtr> accounts() { std::lock_guard g(m); return megaAccounts; }
+    std::vector<OwningFolderPtr> folderLinks() { std::lock_guard g(m); return megaFolderLinks; }
 
-    AccountPtr getAccount(ApiPtr a) { std::lock_guard g(m); for (auto& p : megaAccounts) if (p->masp == a.lock()) return p; return {}; }
+    OwningAccountPtr getAccount(ApiPtr a) { std::lock_guard g(m); for (auto& p : megaAccounts) if (p->masp == a.lock()) return p; return {}; }
 
     std::atomic<int> accountsUpdateCount = 0;
     std::atomic<int> folderLinksUpdateCount = 0;
@@ -89,23 +103,23 @@ struct MEGA
     std::condition_variable updateCV;
     std::mutex updateCVMutex;
 
-    AccountPtr makeTempAccount();
-    FolderPtr makeTempFolder();
-    void addAccount(AccountPtr&);
-    void addFolder(FolderPtr&);
-    void logoutremove(OwningApiPtr masp);
-	void deletecache(OwningApiPtr masp);
+    OwningAccountPtr makeTempAccount();
+    OwningFolderPtr makeTempFolder();
+    void addAccount(OwningAccountPtr&);
+    void addFolder(OwningFolderPtr&);
+    void logoutremove(OwningAccountPtr masp);
+	void deletecache(OwningAccountPtr masp);
 
     OwningApiPtr findMegaApi(uint64_t dragdroptoken);
 
     void AddMRequest(ApiPtr masp, std::shared_ptr<MRequest>&&);
     std::deque<std::shared_ptr<MRequest>> getRequestHistory();
 
-	void onLogin(const m::MegaError* e, AccountPtr masp);
+	void onLogin(const m::MegaError* e, OwningAccountPtr masp);
 
     Favourites favourites;
-    void loadFavourites(AccountPtr macc);
-    void saveFavourites(AccountPtr macc);
+    void loadFavourites(OwningAccountPtr macc);
+    void saveFavourites(OwningAccountPtr macc);
 
     std::unique_ptr<m::MegaNode> findNode(m::MegaHandle h);
 
@@ -115,8 +129,8 @@ struct MEGA
 
 private:
 	std::mutex m;
-	std::vector<AccountPtr> megaAccounts;
-    std::vector<FolderPtr> megaFolderLinks;
+	std::vector<OwningAccountPtr> megaAccounts;
+    std::vector<OwningFolderPtr> megaFolderLinks;
     std::deque<std::shared_ptr<MRequest>> requestHistory;
 };
 

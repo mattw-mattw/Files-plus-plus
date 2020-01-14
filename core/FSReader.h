@@ -86,7 +86,7 @@ private:
 
 struct MegaAccountReader : public FSReader
 {
-	MegaAccountReader(ApiPtr p, QueueTrigger t, bool r, UserFeedback& uf);
+	MegaAccountReader(WeakAccountPtr p, QueueTrigger t, bool r, UserFeedback& uf);
 	~MegaAccountReader();
 
 	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
@@ -94,7 +94,7 @@ struct MegaAccountReader : public FSReader
 private:
 	void Threaded();
 
-	ApiPtr mawp;
+	WeakAccountPtr wap;
 	bool cancelling = false;
 	std::thread workerthread;
 };
@@ -111,7 +111,7 @@ struct NodeUpdateListener : public m::MegaGlobalListener
 
 struct MegaFSReader : public FSReader
 {
-	MegaFSReader(ApiPtr p, std::unique_ptr<m::MegaNode>, QueueTrigger t, bool r, UserFeedback& uf);
+	MegaFSReader(OwningAccountPtr p, std::unique_ptr<m::MegaNode>, QueueTrigger t, bool r, UserFeedback& uf);
 	~MegaFSReader();
 
 private:
@@ -126,6 +126,44 @@ private:
 	OwningApiPtr masp;  // TODO: make sure we destory the reader on window close
 	std::unique_ptr<m::MegaNode> mnode;
     std::set<::mega::MegaHandle> nodes_present;
+	bool cancelling = false;
+	std::thread workerthread;
+};
+
+struct MegaChatRoomsReader : public FSReader
+{
+	MegaChatRoomsReader(OwningAccountPtr p, QueueTrigger t, bool r, UserFeedback& uf);
+	~MegaChatRoomsReader();
+
+private:
+	void Threaded();
+	void RecursiveRead(m::MegaNode& mnode, const std::string& basepath);
+	void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths) override;
+	void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
+	auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems)->MenuActions override;
+
+	NodeUpdateListener listener;
+	OwningAccountPtr ap;  
+	bool cancelling = false;
+	std::thread workerthread;
+};
+
+struct MegaChatReader : public FSReader
+{
+	MegaChatReader(OwningAccountPtr p, QueueTrigger t, bool r, UserFeedback& uf);
+	~MegaChatReader();
+
+private:
+	void Threaded();
+	void RecursiveRead(m::MegaNode& mnode, const std::string& basepath);
+	void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths) override;
+	void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
+	auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems)->MenuActions override;
+
+	NodeUpdateListener listener;
+	OwningAccountPtr ap;
+	//	std::unique_ptr<m::MegaNode> mnode;
+	//	std::set<::mega::MegaHandle> nodes_present;
 	bool cancelling = false;
 	std::thread workerthread;
 };

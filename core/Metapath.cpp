@@ -39,10 +39,18 @@ bool MetaPath::Ascend()
             pathType = TopShelf;
             return true;
         }
+        case MegaChats: {
+            pathType = MegaAccount;
+            return true;
+        }
+        case MegaChat: {
+            pathType = MegaChats;
+            return false; // todo
+        }
         case MegaFS: {
-            if (auto ap = mawp.lock())
+            if (auto p = wap.lock())
             {
-                unique_ptr<m::MegaNode> n(ap->getParentNode(mnode.get()));
+                unique_ptr<m::MegaNode> n(p->masp->getParentNode(mnode.get()));
                 if (n)
                 {
                     mnode.reset(n.release());
@@ -50,7 +58,7 @@ bool MetaPath::Ascend()
                 else
                 {
                     pathType = MegaAccount;
-                    mnode.reset();
+                    wap = g_mega->getAccount(p->masp);
                 }
                 return true;
             }
@@ -70,10 +78,10 @@ bool MetaPath::Descend(const Item& item)
     case TopShelf: {
         if (auto i = dynamic_cast<const ItemMegaAccount*>(&item))
         {
-            if (auto ap = i->mawp.lock())
+            if (auto ap = i->wap.lock())
             {
                 pathType = MegaAccount;
-                mawp = i->mawp;
+                wap = i->wap;
                 mnode.reset();
             }
             else break;
@@ -81,23 +89,29 @@ bool MetaPath::Descend(const Item& item)
         else if (item.u8Name == "<MEGA Command History>")
         {
             pathType = CommandHistory;
-            mawp.reset();
+            wap.reset();
             mnode.reset();
         }
         else
         {
             pathType = LocalVolumes;
             mnode.reset();
-            mawp.reset();
+            wap.reset();
         }
         return true;
     }
     case LocalFS: {
         fs::path newpath = localPath / fs::u8path(item.u8Name);
-        if (fs::is_directory(newpath))
+        std::error_code ec;
+        if (fs::is_directory(newpath, ec))
         {
             localPath = newpath;
             return true;
+        }
+        else if (ec)
+        {
+            ReportError("Could not open directory: " + ec.message());
+            return false;
         }
         if (auto p = dynamic_cast<const ItemLocalFS*>(&item))
         {
@@ -136,6 +150,16 @@ bool MetaPath::Descend(const Item& item)
             pathType = MegaFS;
             return true;
         }
+        else if (auto i = dynamic_cast<const ItemMegaChatRoot*>(&item))
+        {
+            //mnode.reset(i->mnode->copy());
+            pathType = MegaChats;
+            return true;
+        }
+    }
+    case MegaChats: {
+        pathType = MegaChat;
+        return true;
     }
     case MegaFS: {
         if (auto i = dynamic_cast<const ItemMegaNode*>(&item))
@@ -171,9 +195,9 @@ bool MetaPath::GetDragDropUNCPath(Item* pItem, std::string& uncPath)
     case LocalFS:   uncPath = PlatformLocalUNCPrefix() + (localPath / pItem->u8Name).u8string();
                     return true;
     case MegaFS:    if (auto p = dynamic_cast<ItemMegaNode*>(pItem)) 
-                        if (auto masp = mawp.lock())
+                        if (auto ap = wap.lock())
                         {   
-                            uncPath = PlatformMegaUNCPrefix(masp.get()) + masp->getNodePath(p->mnode.get());
+                            uncPath = PlatformMegaUNCPrefix(ap->masp.get()) + ap->masp->getNodePath(p->mnode.get());
                             return true;
                         }
     default:        break;
@@ -191,8 +215,8 @@ string MetaPath::GetFullPath(Item& item)
         break;
 
     case MegaFS: if (auto p = dynamic_cast<ItemMegaNode*>(&item))
-                    if (auto masp = mawp.lock())
-                        s = masp->getNodePath(p->mnode.get());  
+                    if (auto ap = wap.lock())
+                        s = ap->masp->getNodePath(p->mnode.get());  
                 break;
     }
     return s;
@@ -206,8 +230,10 @@ unique_ptr<FSReader> MetaPath::GetContentReader(FSReader::QueueTrigger t, bool r
     case LocalFS: return NewLocalFSReader(localPath, t, recurse, uf);
     case Playlist: return make_unique<PlaylistReader>(localPath, t, recurse, uf);
     case LocalVolumes: return make_unique<LocalVolumeReader>(t, recurse, uf);
-    case MegaAccount: if (auto masp = mawp.lock()) return make_unique<MegaAccountReader>(masp, t, recurse, uf);
-    case MegaFS: if (auto masp = mawp.lock()) return make_unique<MegaFSReader>(masp, mnode.copy(), t, recurse, uf);
+    case MegaAccount: if (auto ap = wap.lock()) return make_unique<MegaAccountReader>(ap, t, recurse, uf);
+    case MegaChats:  if (auto ap = wap.lock()) return make_unique<MegaChatRoomsReader>(ap, t, recurse, uf);
+    case MegaChat: if (auto ap = wap.lock()) return make_unique<MegaChatReader>(ap, t, recurse, uf);
+    case MegaFS: if (auto ap = wap.lock()) return make_unique<MegaFSReader>(ap, mnode.copy(), t, recurse, uf);
     case CommandHistory: return make_unique<CommandHistoryReader>(t, uf);
     default: assert(false);
     }
@@ -223,16 +249,18 @@ std::string MetaPath::u8DisplayPath() const
     case Playlist: return localPath.u8string();
     case LocalVolumes: return "<Local Volumes>";
     case MegaAccount: {
-        if (auto masp = mawp.lock())
+        if (auto ap = wap.lock())
         {
-            OwnStr e(masp->getMyEmail(), false);
+            OwnStr e(ap->masp->getMyEmail(), false);
             return string(e ? e.get() : "<null>");
         }
     }
+    case MegaChats: return "<Chatrooms>";
+    case MegaChat: return "<Chat>";
     case MegaFS: {
-        if (auto masp = mawp.lock())
+        if (auto ap = wap.lock())
         {
-            return OwnString(masp->getNodePath(mnode.get()));
+            return OwnString(ap->masp->getNodePath(mnode.get()));
         }
     }
     }
@@ -248,8 +276,10 @@ bool MetaPath::operator==(const MetaPath& o) const
     case LocalFS: return localPath == o.localPath;
     case Playlist: return localPath == o.localPath;
     case LocalVolumes: return true;
-    case MegaAccount: return mawp.lock() == o.mawp.lock();
-    case MegaFS: return mawp.lock() == o.mawp.lock() && mnode->getHandle() == o.mnode->getHandle();
+    case MegaAccount: return wap.lock() == o.wap.lock();
+    case MegaChats: return wap.lock() == o.wap.lock();
+    case MegaChat: return wap.lock() == o.wap.lock();
+    case MegaFS: return wap.lock() == o.wap.lock() && mnode->getHandle() == o.mnode->getHandle();
     }
     return false;
 }
@@ -269,7 +299,7 @@ std::function<bool(unique_ptr<Item>& a, unique_ptr<Item>& b)> MetaPath::nodeComp
     }
 }
 
-OwningApiPtr MetaPath::Account()
+OwningAccountPtr MetaPath::Account()
 {
     switch (pathType)
     {
@@ -278,7 +308,9 @@ OwningApiPtr MetaPath::Account()
     case Playlist:
     case LocalVolumes:  return {};
     case MegaAccount:
-    case MegaFS: return mawp.lock();
+    case MegaChats:
+    case MegaChat:
+    case MegaFS: return wap.lock();
     }
     return {};
 }
@@ -304,19 +336,21 @@ bool MetaPath::serialize(std::string& s)
             return true;
         }
         case MegaAccount: {
-            if (auto masp = mawp.lock())
+            if (auto ap = wap.lock())
             {
-                s = "MegaAccount/" + MEGA::ToBase64(OwnString(masp->getMyEmail()));
+                s = "MegaAccount/" + MEGA::ToBase64(OwnString(ap->masp->getMyEmail()));
                 return true;
             }
         }
         case MegaFS: {
-            if (auto masp = mawp.lock())
+            if (auto ap = wap.lock())
             {
-                s = "MegaFS/" + MEGA::ToBase64(OwnString(masp->getMyEmail())) + "/" + MEGA::ToBase64(masp->getNodePath(mnode.get()));
+                s = "MegaFS/" + MEGA::ToBase64(OwnString(ap->masp->getMyEmail())) + "/" + MEGA::ToBase64(ap->masp->getNodePath(mnode.get()));
                 return true;
             }
         }
+        case MegaChats: // todo
+        case MegaChat:;
     }
     assert(false);    
     return false;
@@ -355,7 +389,7 @@ MetaPath MetaPath::deserialize(const std::string& s)
             OwnString email(ptr->masp->getMyEmail());
             if (email == acc) 
             { 
-                mp.mawp = ptr->masp; 
+                mp.wap = ptr; 
                 return mp; 
             } 
         };
@@ -368,9 +402,9 @@ MetaPath MetaPath::deserialize(const std::string& s)
         {
             auto acc = MEGA::FromBase64(s.substr(7, n-7));
             auto path = MEGA::FromBase64(s.substr(n+1));
-            for (auto ptr : g_mega->accounts()) { if (OwnString(ptr->masp->getMyEmail()) == acc) { mp.mawp = ptr->masp; } };
-            if (auto masp = mp.mawp.lock()) mp.mnode.reset(masp->getNodeByPath(path.c_str()));
-            if (mp.mawp.lock() && mp.mnode) return mp;
+            for (auto ptr : g_mega->accounts()) { if (OwnString(ptr->masp->getMyEmail()) == acc) { mp.wap = ptr; } };
+            if (auto ap = mp.wap.lock()) mp.mnode.reset(ap->masp->getNodeByPath(path.c_str()));
+            if (mp.wap.lock() && mp.mnode) return mp;
         }
     }
     assert(false);

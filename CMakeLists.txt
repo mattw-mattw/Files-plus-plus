@@ -10,7 +10,7 @@ project("Files++")
 set(Mega3rdPartyDir "${CMAKE_CURRENT_LIST_DIR}/../3rdParty"  CACHE STRING "Third party library location")
 
 # specify the MEGA SDK location 
-include(${CMAKE_CURRENT_LIST_DIR}/MEGA.nz/sdk/contrib/cmake/CMakeLists.txt)
+include(${CMAKE_CURRENT_LIST_DIR}/MEGA.nz/MEGAchat/contrib/cmake/CMakeLists.txt)
 
 if (WIN32)
 
@@ -31,7 +31,10 @@ if (WIN32)
             windows/UserPassDialog.cpp windows/UserPassDialog.h
             windows/PlatformSupplied.cpp
     )
-    target_link_libraries("Files++" PUBLIC uafxcwd.lib Mega)
+    target_link_libraries("Files++" PUBLIC  debug uafxcwd.lib  # MFC libs first for correct new/delete linkage
+                                            optimized uafxcw.lib
+                                            general Mega karere Iphlpapi.lib  Psapi.lib Userenv.lib )
+    #libuv: Iphlpapi.lib  Psapi.lib 	Userenv.lib
 
     set_target_properties("Files++"  PROPERTIES
         COMPILE_DEFINITIONS _UNICODE,UNICODE,_BIND_TO_CURRENT_CRT_VERSION,_BIND_TO_CURRENT_MFC_VERSION

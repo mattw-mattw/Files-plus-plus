@@ -38,7 +38,7 @@ bool QueryUserOkCancel(const std::string& message)
 
 void AddMEGAAccount()
 {
-	AccountPtr acc = g_mega->makeTempAccount();
+	OwningAccountPtr acc = g_mega->makeTempAccount();
 
 	UserPassDialog dlg;
 	for (;;)
@@ -66,7 +66,7 @@ void AddMEGAAccount()
 
 void AddMEGAFolderLink()
 {
-    FolderPtr acc = g_mega->makeTempFolder();
+    OwningFolderPtr acc = g_mega->makeTempFolder();
 
     UserPassDialog dlg;
     for (;;)

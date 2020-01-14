@@ -48,10 +48,29 @@ void FilterDlg::DoDataExchange(CDataExchange* pDX)
 
 BEGIN_MESSAGE_MAP(FilterDlg, CDialogEx)
 	ON_BN_CLICKED(IDOK2, &FilterDlg::OnBnClickedOk2)
+	ON_BN_CLICKED(IDOK, &FilterDlg::OnBnClickedOk)
+	ON_BN_CLICKED(IDAPPLY, &FilterDlg::OnBnClickedApply)
+	ON_BN_CLICKED(IDCANCEL, &FilterDlg::OnBnClickedCancel)
 END_MESSAGE_MAP()
 
 void FilterDlg::OnBnClickedOk2()
 {
 	m_settings.Reset();
 	EndDialog(IDOK);
+}
+void FilterDlg::OnBnClickedOk()
+{
+	UpdateData(TRUE);
+	onOkAction();
+	DestroyWindow();
+}
+void FilterDlg::OnBnClickedApply()
+{
+	UpdateData(TRUE);
+	onOkAction();
+	SetDefID(IDAPPLY);
+}
+void FilterDlg::OnBnClickedCancel()
+{
+	DestroyWindow();
 }

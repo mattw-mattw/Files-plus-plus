@@ -6,6 +6,28 @@
 
 class MRequest;
 
+struct Account
+{
+	std::filesystem::path cacheFolder;
+	OwningApiPtr masp;
+	OwningChatPtr mcsp;
+	std::string chatState = "<no chat>";  // todo: make thread safe, notify
+	Account(const std::filesystem::path& p, OwningApiPtr ap, OwningChatPtr cp) : cacheFolder(p), masp(ap), mcsp(cp) {}
+};
+
+struct PublicFolder : Account
+{
+	std::string folderLink;
+	PublicFolder(const std::string& link, const std::filesystem::path& p, OwningApiPtr masp) : Account(p, masp, nullptr), folderLink(link) {}
+	~PublicFolder() {}
+};
+
+typedef std::shared_ptr<Account> OwningAccountPtr;
+typedef std::weak_ptr<Account> WeakAccountPtr;
+
+typedef std::shared_ptr<PublicFolder> OwningFolderPtr;
+typedef std::weak_ptr<PublicFolder> WeakFolderPtr;
+
 
 struct MenuActions
 {
@@ -50,8 +72,8 @@ struct ItemError : public Item
 
 struct ItemMegaAccount : public Item
 {
-    ItemMegaAccount(std::string n, ApiPtr p) : Item(std::move(n)), mawp(p) {}
-    ApiPtr mawp;
+    ItemMegaAccount(std::string n, WeakAccountPtr p) : Item(std::move(n)), wap(p) {}
+    WeakAccountPtr wap;
 };
 
 struct ItemMegaNode : public Item
@@ -61,6 +83,21 @@ struct ItemMegaNode : public Item
 	bool isFolder() const override { return mnode->isFolder(); }
 	int64_t size() const override { return isFolder() ? -1 : mnode->getSize(); }
 };
+
+struct ItemMegaChatRoot : public Item
+{
+	ItemMegaChatRoot(std::string name, WeakAccountPtr p) : Item(move(name)), wap(p) {}
+	WeakAccountPtr wap;
+	bool isFolder() const override { return false; }
+};
+
+struct ItemMegaChat : public Item
+{
+	ItemMegaChat(std::string name, std::unique_ptr<c::MegaChatRoom>&& p) : Item(move(name)), room(move(p)) {}
+	std::unique_ptr<c::MegaChatRoom> room;
+	bool isFolder() const override { return false; }
+};
+
 
 struct ItemMegaInshare : public Item
 {

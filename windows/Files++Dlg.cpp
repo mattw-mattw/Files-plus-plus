@@ -132,8 +132,7 @@ CFilesPPDlg::~CFilesPPDlg()
 {
     activeReader.reset();
 
-    --atomicInstances;
-    if (!atomicInstances)
+    if (!--atomicInstances)
     {
         delete g_mega;
         ++atomicExitOk;
@@ -141,8 +140,8 @@ CFilesPPDlg::~CFilesPPDlg()
     }
 }
 
-std::atomic<unsigned> CFilesPPDlg::atomicInstances;
-std::atomic<unsigned> CFilesPPDlg::atomicExitOk;
+std::atomic<unsigned> CFilesPPDlg::atomicInstances{ 0 };
+std::atomic<unsigned> CFilesPPDlg::atomicExitOk{ 0 };
 
 std::condition_variable CFilesPPDlg::shutdown_cv;
 
@@ -338,7 +337,7 @@ void CFilesPPDlg::LoadContent(bool resetFilter)
     string title = "Files++";
     if (auto acc = m_pathCtl.metaPath.Account())
     {
-        OwnString email(acc->getMyEmail());
+        OwnString email(acc->masp->getMyEmail());
         if (!email.empty()) title = email;
     }
     SetWindowText(CA2CT(title.c_str()));
@@ -651,41 +650,46 @@ void CFilesPPDlg::OnNMDblclkList2(NMHDR *pNMHDR, LRESULT *pResult)
 
 void CFilesPPDlg::OnBnClickedButton2()
 {
-    FilterDlg dlg;
-    dlg.m_settings = dlg.m_settings = filterSettings;
-
-    switch (dlg.DoModal())
+    //if ((GetKeyState(VK_SHIFT) & 0x8000) != 0)
     {
-    case IDOK: 
-        if (filterSettings.recursesubfolders != dlg.m_settings.recursesubfolders)
-        {
-            filterSettings = dlg.m_settings;
+        modelessFilter.reset(new FilterDlg);
+        modelessFilter->m_settings = modelessFilter->m_settings = filterSettings;
+
+        modelessFilter->onOkAction = [this]() {
+            filterSettings = modelessFilter->m_settings;
             LoadContent(false);
-        }
-        else
-        {
-            filterSettings = dlg.m_settings;
-            filter.reset(new Filter(filterSettings, *this));
-            filter->FilterNewItems(items);
-        }
-        break;
-    case IDCANCEL: 
-        break;
+        };
+        modelessFilter->Create(IDD_FILTERDIALOG, this);
+        modelessFilter->ShowWindow(SW_SHOW);
+        return;
     }
+    //else
+    //{
+    //    FilterDlg dlg;
+    //    dlg.m_settings = dlg.m_settings = filterSettings;
+    //    switch (dlg.DoModal())
+    //    {
+    //    case IDOK:
+    //        if (filterSettings.recursesubfolders != dlg.m_settings.recursesubfolders)
+    //        {
+    //            filterSettings = dlg.m_settings;
+    //            LoadContent(false);
+    //        }
+    //        else
+    //        {
+    //            filterSettings = dlg.m_settings;
+    //            filter.reset(new Filter(filterSettings, *this));
+    //            filter->FilterNewItems(items);
+    //        }
+    //        break;
+    //    case IDCANCEL:
+    //        break;
+    //    }
+    //}
 }
 
 Filter::Filter(const FilterDlg::Settings& filterSettings, UserFeedback& uf) : userFeedback(uf)
 {
-    noFolders = filterSettings.filtertype == "Hide folders";
-    noFiles = filterSettings.filtertype == "Hide files";
-    filterFolders = filterSettings.filtertype == "Filter all" || noFiles;
-
-    string buttonText;
-    if (noFolders) buttonText = "Files: ";
-    if (noFiles) buttonText = "Folders: ";
-    buttonText += CT2CA(filterSettings.text.IsEmpty() ? CString(".*") : filterSettings.text);
-    uf.SetFilterText(buttonText);
-
     string exp = CT2CA(filterSettings.text);
     if (!filterSettings.regularexpression)
     {
@@ -698,8 +702,25 @@ Filter::Filter(const FilterDlg::Settings& filterSettings, UserFeedback& uf) : us
         }
     }
 
-    re = std::regex(exp.begin(), exp.end(), filterSettings.casesensitive ? std::regex::ECMAScript : std::regex::icase);
+    try
+    {
+        re = std::regex(exp.begin(), exp.end(), filterSettings.casesensitive ? std::regex::ECMAScript : std::regex::icase);
+    }
+    catch (std::exception & e)
+    {
+        ReportError("Regular Expression error: " + std::string(e.what()));
+        return;
+    }
 
+    noFolders = filterSettings.filtertype == "Hide folders";
+    noFiles = filterSettings.filtertype == "Hide files";
+    filterFolders = filterSettings.filtertype == "Filter all" || noFiles;
+
+    string buttonText;
+    if (noFolders) buttonText = "Files: ";
+    if (noFiles) buttonText = "Folders: ";
+    buttonText += CT2CA(filterSettings.text.IsEmpty() ? CString(".*") : filterSettings.text);
+    uf.SetFilterText(buttonText);
     uf.ClearFilteredItems();
 }
 
@@ -888,10 +909,12 @@ void CFilesPPDlg::SavePlaylist()
     {
         ofstream outfile(path);
         outfile << "[";
+        int comma = 0;
         for (auto& i : items)
         {
             if (auto p = dynamic_cast<ItemMegaNode*>(i.get()))
             {
+                if (comma++) { outfile << ","; }
                 outfile << "{\"h\":\"";
                 outfile << OwnStr(p->mnode->getBase64Handle(), true);
                 outfile << "\"}";
@@ -1130,7 +1153,7 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
         {
             AfxMessageBox(_T("Removed favourite"));
         }
-        g_mega->saveFavourites(g_mega->getAccount(m_pathCtl.metaPath.Account()));
+        g_mega->saveFavourites(m_pathCtl.metaPath.Account());
     }
     else if (pNMUpDown->iDelta < 0)
     {
@@ -1141,7 +1164,7 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
         MenuActions ma;
         for (unsigned i = 0; i < favourites.size(); ++i)
         {
-            OwningApiPtr test = favourites[i].Account();
+            OwningApiPtr test = favourites[i].Account()->masp;
             if (test != currAcc)
             {
                 currAcc = test;

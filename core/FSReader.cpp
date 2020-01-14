@@ -76,12 +76,12 @@ void TopShelfReader::Threaded()
         for (auto& p : megaAccounts)
         {
             OwnString email(p->masp->getMyEmail());
-            Queue(NEWITEM, std::make_unique<ItemMegaAccount>(email.empty() ? string("<loading>") : email, p->masp));
+            Queue(NEWITEM, std::make_unique<ItemMegaAccount>(email.empty() ? string("<loading>") : email, p));
         }
         auto megaFolders = g_mega->folderLinks();
         for (auto& p : megaFolders)
         {
-            Queue(NEWITEM, std::make_unique<ItemMegaAccount>(p->folderLink, p->masp));
+            Queue(NEWITEM, std::make_unique<ItemMegaAccount>(p->folderLink, p));
         }
         Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
         Queue(NEWITEM, std::make_unique<Item>("<MEGA Command History>"));
@@ -125,7 +125,7 @@ auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> M
     {
         if (auto account = dynamic_cast<ItemMegaAccount*>((*selectedItems)[0]))
         {
-            ma.actions.emplace_back("Log Out and remove local cache", [mawp = account->mawp]() { if (auto masp = mawp.lock()) g_mega->logoutremove(masp); });
+            ma.actions.emplace_back("Log Out and remove local cache", [wap = account->wap]() { if (auto ap = wap.lock()) g_mega->logoutremove(ap); });
         }
     }
     else if (selectedItems->empty())
@@ -136,9 +136,9 @@ auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> M
     return ma;
 };
 
-MegaAccountReader::MegaAccountReader(ApiPtr p, QueueTrigger t, bool r, UserFeedback& uf)
+MegaAccountReader::MegaAccountReader(WeakAccountPtr p, QueueTrigger t, bool r, UserFeedback& uf)
     : FSReader(t, r, uf)
-    , mawp(p)
+    , wap(p)
     , workerthread([this]() { Threaded(); })
 {
 }
@@ -158,12 +158,15 @@ void MegaAccountReader::Threaded()
 {
     // todo: make sure readers are destroyed so shared ptr is released
 
-    auto masp = mawp.lock();
-    if (!masp) return;
+    auto acc = wap.lock();
+    if (!acc) return;
+    auto& masp = acc->masp;
 
     unique_ptr<m::MegaNode> root(masp->getRootNode());
     unique_ptr<m::MegaNode> inbox(masp->getInboxNode());
     unique_ptr<m::MegaNode> rubbish(masp->getRubbishNode());
+
+    Queue(NEWITEM, std::make_unique<ItemMegaChatRoot>(acc->chatState, acc));
 
     if (root) Queue(NEWITEM, std::make_unique<ItemMegaNode>(root->getName(), move(root)));
     if (inbox) Queue(NEWITEM, std::make_unique<ItemMegaNode>(inbox->getName(), move(inbox)));
@@ -182,9 +185,9 @@ void MegaAccountReader::Threaded()
     Send();
 }
 
-MegaFSReader::MegaFSReader(ApiPtr p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r, UserFeedback& uf)
+MegaFSReader::MegaFSReader(OwningAccountPtr p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r, UserFeedback& uf)
     : FSReader(t, r, uf)
-    , masp(p)
+    , masp(p->masp)
     , mnode(move(n))
     , workerthread([this]() { Threaded(); })
 {
@@ -419,6 +422,136 @@ void MegaFSReader::Threaded()
 }
 
 
+MegaChatRoomsReader::MegaChatRoomsReader(OwningAccountPtr p, QueueTrigger t, bool r, UserFeedback& uf)
+    : FSReader(t, r, uf)
+    , ap(p)
+    , workerthread([this]() { Threaded(); })
+{
+}
+
+MegaChatRoomsReader::~MegaChatRoomsReader()
+{
+    cancelling = true;
+    listener.nq.push(nullptr);
+    workerthread.join();
+}
+
+auto MegaChatRoomsReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
+{
+    MenuActions ma;
+    if (selectedItems->size())
+    {
+
+        if (selectedItems->size() == 1)
+        {
+            if (auto n = dynamic_cast<ItemMegaNode*>(selectedItems->front()))
+            {
+                //ma.actions.emplace_back("Export Link", [=, masp = masp]()
+                //{
+                //    masp->exportNode(n->mnode.get(), new MRequest(masp, "Export Link", [&](m::MegaRequest* request, m::MegaError* e) {
+                //        if (e && e->getErrorCode() == m::MegaError::API_OK) PutStringToClipboard(request->getLink());
+                //    }));
+                //});
+            }
+        }
+
+    }
+    return ma;
+};
+
+void MegaChatRoomsReader::OnDragDroppedMEGAItems(OwningApiPtr source_masp, const deque<unique_ptr<m::MegaNode>>& nodes)
+{
+    ReportError("Sorry, drag-drop not supported here yet.");
+}
+
+void MegaChatRoomsReader::OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths)
+{
+    ReportError("Sorry, drag-drop not supported here yet.");
+}
+
+void MegaChatRoomsReader::Threaded()
+{
+    ap->masp->addGlobalListener(&listener);
+
+    std::unique_ptr<c::MegaChatRoomList> crl(ap->mcsp->getChatRooms());
+    if (crl)
+    {
+        for (unsigned i = 0; i < crl->size(); ++i)
+        {
+            std::unique_ptr<c::MegaChatRoom> up(crl->get(i)->copy());
+            string name = OwnString(up->getTitle());
+            Queue(NEWITEM, std::make_unique<ItemMegaChat>(name, move(up)));
+        }
+    }
+    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    Send();
+
+    ap->masp->removeGlobalListener(&listener);
+}
+
+
+MegaChatReader::MegaChatReader(OwningAccountPtr p, QueueTrigger t, bool r, UserFeedback& uf)
+    : FSReader(t, r, uf)
+    , ap(p)
+    , workerthread([this]() { Threaded(); })
+{
+}
+
+MegaChatReader::~MegaChatReader()
+{
+    cancelling = true;
+    listener.nq.push(nullptr);
+    workerthread.join();
+}
+
+auto MegaChatReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
+{
+    MenuActions ma;
+    if (selectedItems->size())
+    {
+
+        if (selectedItems->size() == 1)
+        {
+            if (auto n = dynamic_cast<ItemMegaNode*>(selectedItems->front()))
+            {
+                //ma.actions.emplace_back("Export Link", [=, masp = masp]()
+                //{
+                //    masp->exportNode(n->mnode.get(), new MRequest(masp, "Export Link", [&](m::MegaRequest* request, m::MegaError* e) {
+                //        if (e && e->getErrorCode() == m::MegaError::API_OK) PutStringToClipboard(request->getLink());
+                //    }));
+                //});
+            }
+        }
+
+    }
+    return ma;
+};
+
+void MegaChatReader::OnDragDroppedMEGAItems(OwningApiPtr source_masp, const deque<unique_ptr<m::MegaNode>>& nodes)
+{
+    ReportError("Sorry, drag-drop not supported here yet.");
+}
+
+void MegaChatReader::OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths)
+{
+    ReportError("Sorry, drag-drop not supported here yet.");
+}
+
+void MegaChatReader::Threaded()
+{
+    ap->masp->addGlobalListener(&listener);
+
+    //    for (;;)
+    {
+        //      Queue(NEWITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+    }
+    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    Send();
+
+    ap->masp->removeGlobalListener(&listener);
+}
+
+
 CommandHistoryReader::CommandHistoryReader(QueueTrigger t, UserFeedback& uf)
     : FSReader(t, false, uf)
     , workerthread([this]() { Threaded(); })
@@ -464,10 +597,17 @@ PlaylistReader::~PlaylistReader()
 auto PlaylistReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) -> MenuActions
 {
     MenuActions ma;
-    //ma.actions.emplace_back("Save Playlist", [=, masp = masp]()
-    //{
-
-    //});
+    ma.actions.emplace_back("Remove Song(s)", [this, selectedItems]()
+    {
+        for (Item* item : *selectedItems)
+        {
+            if (auto p = dynamic_cast<ItemMegaNode*>(item))
+            {
+                Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(string(p->mnode->getName()), std::unique_ptr<m::MegaNode>(p->mnode->copy())));
+            }
+        }
+        Send();
+    });
     return ma;
 }
 

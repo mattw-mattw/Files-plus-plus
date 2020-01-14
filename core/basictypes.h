@@ -16,8 +16,14 @@ namespace fs = std::filesystem;
 #include <megaapi.h>
 namespace m = ::mega;
 
+#include <megachatapi.h>
+namespace c = ::megachat;
+
 typedef std::shared_ptr<m::MegaApi> OwningApiPtr;
 typedef std::weak_ptr<m::MegaApi> ApiPtr;
+
+typedef std::shared_ptr<c::MegaChatApi> OwningChatPtr;
+typedef std::weak_ptr<c::MegaChatApi> ChatPtr;
 
 template<class T> 
 struct copy_ptr : public std::unique_ptr<T>

@@ -108,6 +108,8 @@ public:
 
 	CRect originatorWindowRect;
 
+	std::unique_ptr<FilterDlg> modelessFilter;
+
 public:
 	HICON m_hIcon;
 

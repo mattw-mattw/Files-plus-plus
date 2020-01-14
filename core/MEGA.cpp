@@ -28,8 +28,12 @@ MEGA::MEGA()
                 {
                     auto masp = make_shared<m::MegaApi>("BTgWXaYb", d->path().u8string().c_str(), "Files++");
                     masp->setLoggingName(d->path().filename().u8string().c_str());
-                    megaAccounts.push_back(make_shared<Account>(d->path(), masp));
-                    masp->fastLogin(sid.c_str(), new OneTimeListener([this, account = megaAccounts.back()](m::MegaRequest* request, m::MegaError* e) { onLogin(e, account); }));
+
+                    auto mcsp = make_shared<c::MegaChatApi>(masp.get());
+                    mcsp->init(nullptr);
+
+                    megaAccounts.push_back(make_shared<Account>(d->path(), masp, mcsp));
+                    masp->fastLogin(sid.c_str(), false, new OneTimeListener([this, account = megaAccounts.back()](m::MegaRequest* request, m::MegaError* e) { onLogin(e, account); }));
                 }
                 else if (!link.empty() && LocalUserCrypt(link, false))
                 {
@@ -63,8 +67,8 @@ MEGA::~MEGA()
     
     {
         std::lock_guard g(m);
-        for (auto& a : megaAccounts) { a->masp->localLogout(); aps.push_back(a); mas.push_back(a->masp); a.reset(); }
-        for (auto& a : megaFolderLinks) { a->masp->localLogout(); fps.push_back(a); mas.push_back(a->masp); a.reset();  }
+        for (auto& a : megaAccounts) { aps.push_back(a); mas.push_back(a->masp); a.reset(); }
+        for (auto& a : megaFolderLinks) { fps.push_back(a); mas.push_back(a->masp); a.reset();  }
     }
 
     do
@@ -93,21 +97,23 @@ std::unique_ptr<m::MegaNode> MEGA::findNode(m::MegaHandle h)
     return nullptr;
 }
 
-void MEGA::loadFavourites(AccountPtr macc)
+void MEGA::loadFavourites(OwningAccountPtr macc)
 {
     ifstream faves((macc ? macc->cacheFolder : BasePath()) / "favourites");
     string s;
     while (std::getline(faves, s))
     {
+        while (!s.empty() && isspace(s.back())) s.pop_back();
+        if (s.empty()) continue;
         auto mp = MetaPath::deserialize(s);
         if (mp) favourites.Toggle(mp);
     }
 }
 
-void MEGA::saveFavourites(AccountPtr macc)
+void MEGA::saveFavourites(OwningAccountPtr macc)
 {
     ofstream faves((macc ? macc->cacheFolder : BasePath()) / "favourites");
-    for (auto& f : favourites.copy()) { string s; if (getAccount(f.Account()) == macc && f.serialize(s)) faves << s << std::endl; }
+    for (auto& f : favourites.copy()) { string s; if (f.Account() == macc && f.serialize(s)) faves << s << std::endl; }
 }
 
 auto MEGA::findMegaApi(uint64_t dragdroptoken) -> OwningApiPtr
@@ -132,7 +138,7 @@ std::deque<std::shared_ptr<MRequest>> MEGA::getRequestHistory()
     return requestHistory;
 }
 
-void MEGA::onLogin(const m::MegaError* e, AccountPtr macc)
+void MEGA::onLogin(const m::MegaError* e, OwningAccountPtr macc)
 {
 	if (e && e->getErrorCode())
 	{
@@ -147,6 +153,15 @@ void MEGA::onLogin(const m::MegaError* e, AccountPtr macc)
                 ++folderLinksUpdateCount;
                 updateCV.notify_all();
                 loadFavourites(macc);
+                if (macc->mcsp)
+                {
+                    macc->mcsp->connect(new OneTimeChatListener([wcp = WeakAccountPtr(macc)](c::MegaChatRequest* request, c::MegaChatError* ce) {
+                        if (auto macc = wcp.lock())
+                        {
+                            macc->chatState = ce && ce->getErrorCode() ? "<chat connect failed>" : macc->chatState = "<chat>";
+                        }
+                    }));
+                }
 			}));
 	}
     ++accountsUpdateCount;
@@ -154,17 +169,20 @@ void MEGA::onLogin(const m::MegaError* e, AccountPtr macc)
     updateCV.notify_all();
 }
 
-AccountPtr MEGA::makeTempAccount()
+OwningAccountPtr MEGA::makeTempAccount()
 {
     string foldername = to_string(time(NULL));
     fs::path p = BasePath() / foldername;
     fs::create_directories(p);
-    auto ptr = make_shared<Account>(p, make_shared<m::MegaApi>("BTgWXaYb", p.u8string().c_str(), "Files++"));
+    auto megaapi = make_shared<m::MegaApi>("BTgWXaYb", p.u8string().c_str(), "Files++");
+    auto megachatapi = make_shared<c::MegaChatApi>(megaapi.get());
+    megachatapi->init(nullptr);
+    auto ptr = make_shared<Account>(p, megaapi, megachatapi);
     ptr->masp->setLoggingName(foldername.c_str());
     return ptr;
 }
 
-FolderPtr MEGA::makeTempFolder()
+OwningFolderPtr MEGA::makeTempFolder()
 {
     string foldername = to_string(time(NULL));
     fs::path p = BasePath() / foldername;
@@ -174,7 +192,7 @@ FolderPtr MEGA::makeTempFolder()
     return ptr;
 }
 
-void MEGA::addAccount(AccountPtr& a) {
+void MEGA::addAccount(OwningAccountPtr& a) {
     std::lock_guard g(m);
     unique_ptr<char[]> sidvalue(a->masp->dumpSession());
     string sidvaluestr(sidvalue.get());
@@ -196,7 +214,7 @@ void MEGA::addAccount(AccountPtr& a) {
     ReportError("Failed to encrypt or write SID");
 }
 
-void MEGA::addFolder(FolderPtr& a) {
+void MEGA::addFolder(OwningFolderPtr& a) {
     std::lock_guard g(m);
     string sidvaluestr(a->folderLink);
     fs::path sidFile = a->cacheFolder / "link";
@@ -217,27 +235,27 @@ void MEGA::addFolder(FolderPtr& a) {
     ReportError("Failed to encrypt or write folder link");
 }
 
-void MEGA::logoutremove(OwningApiPtr masp)
+void MEGA::logoutremove(OwningAccountPtr ap)
 {
-	if (masp->isLoggedIn())
+	if (ap->masp->isLoggedIn())
 	{
-		masp->logout(new OneTimeListener([this, masp](m::MegaRequest*, m::MegaError* e) {
+		ap->masp->logout(new OneTimeListener([this, ap](m::MegaRequest*, m::MegaError* e) {
 			if (e && e->getErrorCode() != m::MegaError::API_OK) ReportError("Logout error: ", e);
-			deletecache(masp);
+			deletecache(ap);
 			}));
 	}
 	else
 	{
-		deletecache(masp);
+		deletecache(ap);
 	}
 }
 
-void MEGA::deletecache(OwningApiPtr masp)
+void MEGA::deletecache(OwningAccountPtr ap)
 {
 	std::lock_guard g(m);
     for (auto it = megaAccounts.begin(); it != megaAccounts.end(); ++it)
     {
-        if ((*it)->masp == masp)
+        if (*it == ap)
         {
             (*it)->masp->localLogout();
             std::error_code ec;
@@ -251,7 +269,7 @@ void MEGA::deletecache(OwningApiPtr masp)
     }
     for (auto it = megaFolderLinks.begin(); it != megaFolderLinks.end(); ++it)
     {
-        if ((*it)->masp == masp)
+        if ((*it)->masp == ap->masp)
         {
             (*it)->masp->localLogout();
             std::error_code ec;

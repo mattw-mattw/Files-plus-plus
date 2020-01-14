@@ -44,5 +44,10 @@ public:
 	} m_settings;
 
 	afx_msg void OnBnClickedOk2();
+	afx_msg void OnBnClickedOk();
+	afx_msg void OnBnClickedApply();
+	afx_msg void OnBnClickedCancel();
 	CComboBox m_filtertypeCtl;
+
+	std::function<void()> onOkAction;
 };
