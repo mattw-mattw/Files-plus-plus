@@ -8,6 +8,7 @@
 #include <string>
 #include <assert.h>
 #include <set>
+#include <map>
 #include <functional>
 
 #include <filesystem>

@@ -45,7 +45,7 @@ bool MetaPath::Ascend()
         }
         case MegaChat: {
             pathType = MegaChats;
-            return false; // todo
+            return true;
         }
         case MegaFS: {
             if (auto p = wap.lock())
@@ -158,8 +158,13 @@ bool MetaPath::Descend(const Item& item)
         }
     }
     case MegaChats: {
-        pathType = MegaChat;
-        return true;
+        if (auto p = dynamic_cast<const ItemMegaChat*>(&item))
+        {
+            pathType = MegaChat;
+            chatroom.reset(p->room->copy());
+            return true;
+        }
+        return false;
     }
     case MegaFS: {
         if (auto i = dynamic_cast<const ItemMegaNode*>(&item))
@@ -222,7 +227,7 @@ string MetaPath::GetFullPath(Item& item)
     return s;
 }
 
-unique_ptr<FSReader> MetaPath::GetContentReader(FSReader::QueueTrigger t, bool recurse, UserFeedback& uf) const
+unique_ptr<FSReader> MetaPath::GetContentReader(QueueTrigger t, bool recurse, UserFeedback& uf) const
 {
     switch (pathType)
     {
@@ -232,7 +237,7 @@ unique_ptr<FSReader> MetaPath::GetContentReader(FSReader::QueueTrigger t, bool r
     case LocalVolumes: return make_unique<LocalVolumeReader>(t, recurse, uf);
     case MegaAccount: if (auto ap = wap.lock()) return make_unique<MegaAccountReader>(ap, t, recurse, uf);
     case MegaChats:  if (auto ap = wap.lock()) return make_unique<MegaChatRoomsReader>(ap, t, recurse, uf);
-    case MegaChat: if (auto ap = wap.lock()) return make_unique<MegaChatReader>(ap, t, recurse, uf);
+    case MegaChat: if (auto ap = wap.lock()) return make_unique<MegaChatReader>(ap, std::unique_ptr<c::MegaChatRoom>(chatroom->copy()), t, recurse, uf);
     case MegaFS: if (auto ap = wap.lock()) return make_unique<MegaFSReader>(ap, mnode.copy(), t, recurse, uf);
     case CommandHistory: return make_unique<CommandHistoryReader>(t, uf);
     default: assert(false);

@@ -39,12 +39,12 @@ void LocalVolumeReader::Threaded()
             ULARGE_INTEGER freebytesforcaller, totalbytes, freebytes;
             GetDiskFreeSpaceExA(n.c_str(), &freebytesforcaller, &totalbytes, &freebytes);
 
-            Queue(NEWITEM, make_unique<ItemLocalFS>(n, totalbytes.QuadPart, true));
+            itemQueue->Queue(NEWITEM, make_unique<ItemLocalFS>(n, totalbytes.QuadPart, true));
         }
         s.erase(0, len2 + 1);
     }
-    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-    Send();
+    itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    itemQueue->Send();
 }
 
 LocalFSReader::LocalFSReader(fs::path p, QueueTrigger t, bool r, UserFeedback& uf)
@@ -117,19 +117,19 @@ bool LocalFSReader::ReadDir(const fs::path& p, bool recurse, const fs::path& rec
             fs::path relativename = recurseprefix / i->path().filename();
             if (i->is_directory())
             {
-                Queue(NEWITEM, make_unique<ItemLocalFS>(relativename.u8string(), -1, true));
+                itemQueue->Queue(NEWITEM, make_unique<ItemLocalFS>(relativename.u8string(), -1, true));
                 if (recurse && !ReadDir(i->path(), true, relativename)) return false;
             }
             else if (i->is_regular_file())
             {
-                Queue(NEWITEM, make_unique<ItemLocalFS>(relativename.u8string(), i->file_size(), false));
+                itemQueue->Queue(NEWITEM, make_unique<ItemLocalFS>(relativename.u8string(), i->file_size(), false));
             }
         }
         return true;
     }
     catch (std::exception& e)
     {
-        Queue(FILE_ACTION_APP_ERROR, unique_ptr<Item>(new ItemError("Error reading directory: " + string(e.what()))));
+        itemQueue->Queue(FILE_ACTION_APP_ERROR, unique_ptr<Item>(new ItemError("Error reading directory: " + string(e.what()))));
         return false;
     }
 }
@@ -225,15 +225,15 @@ void LocalFSReader::Threaded()
                     if (actualfolder.find(L"\\\\?\\") == 0) actualfolder.erase(0, 4);  // extended-length path prefix "\\?\"
                     if (actualfolder.find(L"\\??\\") == 0) actualfolder.erase(0, 4);  // seen in practice "\??\"
                     dir = fs::path(actualfolder);
-                    Queue(FOLDER_RESOLVED_SOFTLINK, make_unique<ItemLocalFS>(dir.u8string(), -1, true));
+                    itemQueue->Queue(FOLDER_RESOLVED_SOFTLINK, make_unique<ItemLocalFS>(dir.u8string(), -1, true));
                 }
             }
         }
 
         if (hDirectory == INVALID_HANDLE_VALUE)
         {
-            Queue(FILE_ACTION_APP_ERROR, unique_ptr<Item>(new ItemError("Could not read directory: " + ec.message())));
-            Send();
+            itemQueue->Queue(FILE_ACTION_APP_ERROR, unique_ptr<Item>(new ItemError("Could not read directory: " + ec.message())));
+            itemQueue->Send();
             return;
         }
     }
@@ -244,8 +244,8 @@ void LocalFSReader::Threaded()
     bool notifyOk = RequestChanges();
 
     if (!ReadDir(dir, recurse, "")) return;
-    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-    Send();
+    itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    itemQueue->Send();
 
     // and scan for changes (including any that occured while reading)
     DWORD dwBytes = 0;
@@ -266,27 +266,27 @@ void LocalFSReader::Threaded()
             {
                 error_code ec;
                 auto s = fs::directory_entry(dir / p, ec);
-                if (!ec && fs::is_directory(s)) Queue(NEWITEM, make_unique<ItemLocalFS>(p.u8string(), -1, true));
-                if (!ec && fs::is_regular_file(s)) Queue(NEWITEM, make_unique<ItemLocalFS>(p.u8string(), s.file_size(), false));
+                if (!ec && fs::is_directory(s)) itemQueue->Queue(NEWITEM, make_unique<ItemLocalFS>(p.u8string(), -1, true));
+                if (!ec && fs::is_regular_file(s)) itemQueue->Queue(NEWITEM, make_unique<ItemLocalFS>(p.u8string(), s.file_size(), false));
                 break;
             }
             case FILE_ACTION_REMOVED:
-                Queue(DELETEDITEM, make_unique<ItemLocalFS>(p.u8string(), -1, false));
+                itemQueue->Queue(DELETEDITEM, make_unique<ItemLocalFS>(p.u8string(), -1, false));
                 break;
 
             case FILE_ACTION_RENAMED_OLD_NAME:
-                Queue(RENAMEDFROM, make_unique<ItemLocalFS>(p.u8string(), -1, false));
+                itemQueue->Queue(RENAMEDFROM, make_unique<ItemLocalFS>(p.u8string(), -1, false));
                 break;
 
             case FILE_ACTION_RENAMED_NEW_NAME:
-                Queue(RENAMEDTO, make_unique<ItemLocalFS>(p.u8string(), -1, false));
+                itemQueue->Queue(RENAMEDTO, make_unique<ItemLocalFS>(p.u8string(), -1, false));
                 break;
             }
 
             ptr += fni->NextEntryOffset;
             dwBytes -= fni->NextEntryOffset ? fni->NextEntryOffset : dwBytes;
         }
-        Send();
+        itemQueue->Send();
 
         // kick off a new query (notifications in the meantime will have been queued in its internal buffer)
         notifyOk = RequestChanges();
@@ -294,8 +294,8 @@ void LocalFSReader::Threaded()
 
     if (!cancelling && !notifyOk)
     {
-        Queue(FILE_ACTION_APP_NOTIFY_FAILURE, NULL);
-        Send();
+        itemQueue->Queue(FILE_ACTION_APP_NOTIFY_FAILURE, NULL);
+        itemQueue->Send();
     }
 }
 

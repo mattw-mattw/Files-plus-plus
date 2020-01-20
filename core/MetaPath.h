@@ -23,7 +23,7 @@ struct MetaPath
 
     std::string GetFullPath(Item&);
 
-	std::unique_ptr<FSReader> GetContentReader(FSReader::QueueTrigger t, bool recurse, UserFeedback& uf) const;
+	std::unique_ptr<FSReader> GetContentReader(QueueTrigger t, bool recurse, UserFeedback& uf) const;
 
 	std::string u8DisplayPath() const;
 
@@ -41,6 +41,7 @@ private:
     std::filesystem::path localPath;
 	WeakAccountPtr wap;
     copy_ptr<m::MegaNode> mnode;
+	copy_ptr<c::MegaChatRoom> chatroom;
 };
 
 

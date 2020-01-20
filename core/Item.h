@@ -6,13 +6,22 @@
 
 class MRequest;
 
-struct Account
+struct ChatRoomListener;
+struct ItemQueue;
+
+struct Account : std::enable_shared_from_this<Account>
 {
 	std::filesystem::path cacheFolder;
 	OwningApiPtr masp;
 	OwningChatPtr mcsp;
+	std::shared_ptr<ChatRoomListener> getChatListener(c::MegaChatHandle roomid, std::shared_ptr<ItemQueue>);
+	void deregisterFromChatListener(c::MegaChatHandle roomid, std::shared_ptr<ItemQueue>);
 	std::string chatState = "<no chat>";  // todo: make thread safe, notify
 	Account(const std::filesystem::path& p, OwningApiPtr ap, OwningChatPtr cp) : cacheFolder(p), masp(ap), mcsp(cp) {}
+
+private:
+	std::mutex m;
+	std::map<c::MegaChatHandle, std::shared_ptr<ChatRoomListener>> chatListeners;
 };
 
 struct PublicFolder : Account
@@ -95,6 +104,13 @@ struct ItemMegaChat : public Item
 {
 	ItemMegaChat(std::string name, std::unique_ptr<c::MegaChatRoom>&& p) : Item(move(name)), room(move(p)) {}
 	std::unique_ptr<c::MegaChatRoom> room;
+	bool isFolder() const override { return false; }
+};
+
+struct ItemMegaChatMessage : public Item
+{
+	ItemMegaChatMessage(std::unique_ptr<c::MegaChatMessage>&& m);
+	std::unique_ptr<c::MegaChatMessage> message;
 	bool isFolder() const override { return false; }
 };
 

@@ -7,6 +7,7 @@
 #include "../core/PlatformSupplied.h"
 #include "../core/MEGA.h"
 #include "UserPassDialog.h"
+#include "TextDialog.h"
 #include "LocalFSReader.h"
 
 using namespace std;
@@ -28,7 +29,12 @@ fs::path BasePath()
 
 void ReportError(const std::string& message, const m::MegaError* e)
 {
-	AfxMessageBox(CA2CT((message + (e ? string(e->getErrorString()) + " (" + to_string(e->getErrorCode()) + ")" : string())).c_str()));
+    AfxMessageBox(CA2CT((message + (e ? string(e->getErrorString()) + " (" + to_string(e->getErrorCode()) + ")" : string())).c_str()));
+}
+
+void ReportError(const std::string& message, const c::MegaChatError* e)
+{
+    AfxMessageBox(CA2CT((message + (e ? string(e->getErrorString()) + " (" + to_string(e->getErrorCode()) + ")" : string())).c_str()));
 }
 
 bool QueryUserOkCancel(const std::string& message)
@@ -94,7 +100,7 @@ void AddMEGAFolderLink()
 }
 
 
-unique_ptr<FSReader> NewLocalFSReader(const fs::path& localPath, FSReader::QueueTrigger t, bool recurse, UserFeedback& uf)
+unique_ptr<FSReader> NewLocalFSReader(const fs::path& localPath, QueueTrigger t, bool recurse, UserFeedback& uf)
 {
 	return make_unique<LocalFSReader>(localPath, t, recurse, uf);
 }
@@ -160,4 +166,15 @@ bool PutStringToClipboard(const string& copyString)
 void WaitMillisec(unsigned n)
 {
     Sleep(n);
+}
+
+bool InputUserChatMessage(std::string& msg)
+{
+    TextDialog dlg;
+    if (IDOK == dlg.DoModal())
+    {
+        msg = CT2CA(dlg.textString);
+        return true;
+    }
+    return false;
 }

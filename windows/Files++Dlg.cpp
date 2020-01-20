@@ -88,10 +88,7 @@ void ItemListCtrl::Sort(int iColumn, BOOL bAscending, BOOL bAdd)
             ? (bAscending ? a->u8Name > b->u8Name : a->u8Name < b->u8Name)
             : (bAscending ? a->size() > b->size() : a->size() < b->size()); };
 
-    if (bAdd)
-        std::stable_sort(filteredItems.begin(), filteredItems.end(), sortFunction);
-    else
-        std::sort(filteredItems.begin(), filteredItems.end(), sortFunction);
+    dlg.filteredItems.sort(sortFunction);
 
     GetHeaderCtrl().SetSortColumn(iColumn, bAscending, bAdd);
 
@@ -111,6 +108,8 @@ IMPLEMENT_DYNAMIC(CFilesPPDlg, CDialogEx);
 CFilesPPDlg::CFilesPPDlg(CWnd* pParent /*=nullptr*/)
     : CDialogEx(IDD_FILESPP_DIALOG, pParent)
     , m_contentCtl(*this)
+    , items([](const unique_ptr<Item>& a, const unique_ptr<Item>& b) { return a->u8Name < b->u8Name; })
+    , filteredItems([](const Item* a, const Item* b) { return a->u8Name < b->u8Name; })
 {
     if (!g_mega)
     {
@@ -344,8 +343,8 @@ void CFilesPPDlg::LoadContent(bool resetFilter)
     
     m_pathCtl.SetWindowText();
     m_contentCtl.SetItemCount(0);
-    m_contentCtl.filteredItems.clear();
     items.clear();
+    filteredItems.clear();
 
     if (resetFilter)
     {
@@ -354,125 +353,82 @@ void CFilesPPDlg::LoadContent(bool resetFilter)
     }
     filter.reset(new Filter(filterSettings, *this));
 
-    FSReader::QueueTrigger t = [wnd = m_hWnd]() { ::PostMessage(wnd, WM_APP_CONTENTUPDATE, (WPARAM)0, (LPARAM)0); };
+    QueueTrigger t = [wnd = m_hWnd]() { ::PostMessage(wnd, WM_APP_CONTENTUPDATE, (WPARAM)0, (LPARAM)0); };
 
     activeReader = m_pathCtl.metaPath.GetContentReader(t, filterSettings.recursesubfolders, *this);
 }
 
 
-template<class T1, class T2>
-void sort_match_removeintersection(T1& a, T2& b, std::function<bool(typename T1::value_type&, typename T2::value_type&)> cmpless)
-{
-    sort(a.begin(), a.end(), cmpless);
-    sort(b.begin(), b.end(), cmpless);
-
-    T1::iterator ra = a.begin(), wa = a.begin();
-    T2::iterator rb = b.begin();
-    bool writinga = false;
-    while (ra != a.end() && rb != b.end())
-    {
-        if (cmpless(*ra, *rb))
-        {
-            if (writinga) *wa = move(*ra);
-            ++wa, ++ra;
-        }
-        else if (cmpless(*rb, *ra))
-        {
-            ++rb;
-        }
-        else
-        {
-            // if we are removing a directory, then also remove anything under it (eg. when a folder is dragged to the rubbish, we don't get notified for the contents - though we are for real deletion (in reverse depth-first))
-            if ((*ra)->isFolder())
-            {
-                string foldername = (*ra)->u8Name;
-                if ((*ra)->u8Name[(*ra)->u8Name.size() - 1] != '\\') foldername.append(1, '\\');
-                ++ra, ++rb;
-                while (ra != a.end() && 0 == strncmp((*ra)->u8Name.c_str(), foldername.c_str(), foldername.size()))
-                    ++ra;
-            }
-            else
-            {
-                ++ra, ++rb;
-            }
-            writinga = true;
-        }
-    }
-    if (writinga)
-    {
-        while (ra != a.end())
-        {
-            *(wa++) = move(*(ra++));
-        }
-        a.erase(wa, a.end());
-    }
-}
-
-template<class T1, class T2>
-void remove_if_absent(T1& a, T2& b)
-{
-    sort(b.begin(), b.end());// , [cmpfield](T2::value_type& b1, T2::value_type& b2) { return cmpfield(b1) < cmpfield(b2); });
-    T1::iterator ra = a.begin(), wa = a.begin();
-    bool writinga = false;
-    while (ra != a.end())
-    {
-        unique_ptr<Item> hackptr(*ra);
-        if (binary_search(b.begin(), b.end(), hackptr))
-        {
-            if (writinga) *wa = move(*ra);
-            ++wa, ++ra;
-        }
-        else
-        {
-            ++ra;
-            writinga = true;
-        }
-        hackptr.release();
-    }
-    a.erase(wa, a.end());
-}
+//template<class T1, class T2>
+//void remove_if_absent(T1& a, T2& b, std::function<bool(std::unique_ptr<T>&, typename T2::value_type&)> cmpless)
+//{
+//    T1::iterator ra = a.begin(), wa = a.begin();
+//    bool writinga = false;
+//    while (ra != a.end())
+//    {
+//        unique_ptr<Item> hackptr(*ra);
+//        if (binary_search(b.begin(), b.end(), hackptr))
+//        {
+//            if (writinga) *wa = move(*ra);
+//            ++wa, ++ra;
+//        }
+//        else
+//        {
+//            ++ra;
+//            writinga = true;
+//        }
+//        hackptr.release();
+//    }
+//    a.erase(wa, a.end());
+//}
 
 LRESULT CFilesPPDlg::OnContentUpdate(WPARAM wParam, LPARAM lParam)
 {
     
-    FSReader::Entry entry;
-    while (activeReader->q.pop(entry, false))
+    ItemQueue::Entry entry;
+    while (activeReader->itemQueue->q.pop(entry, false))
     {
         switch (entry.action)
         {
-        case FSReader::NEWITEM:
-        case FSReader::RENAMEDTO:
+        case NEWITEM:
+        case RENAMEDTO:
             if (filter) filter->FilterNewItems(entry.batch);
 
-            for (auto& i : entry.batch) items.emplace_back(move(i));
+            for (auto& i : entry.batch) items.add(move(i));
             break;
 
-        case FSReader::DELETEDITEM:
-        case FSReader::RENAMEDFROM:
-            sort_match_removeintersection(items, entry.batch, m_pathCtl.metaPath.nodeCompare());
-            remove_if_absent(m_contentCtl.filteredItems, items);
-            m_contentCtl.SetItemCount(int(m_contentCtl.filteredItems.size()));
+        case DELETEDITEM:
+        case RENAMEDFROM:
+            items.removeintersection(entry.batch, false);
+            {
+                std::vector<Item*> batch;
+                batch.reserve(entry.batch.size());
+                for (auto& i : entry.batch) batch.push_back(i.get());
+                filteredItems.removeintersection(batch, true);
+            }
+            //remove_if_absent(m_contentCtl.filteredItems, entry.batch);
+            m_contentCtl.SetItemCount(int(filteredItems.size()));
             break;
 
-        case FSReader::FILE_ACTION_APP_ERROR:
+        case FILE_ACTION_APP_ERROR:
             AfxMessageBox(_T("The directory could not be read"));
             break;
 
-        case FSReader::FILE_ACTION_APP_NOTIFY_FAILURE:
+        case FILE_ACTION_APP_NOTIFY_FAILURE:
             AfxMessageBox(_T("Notifications are not working, file changes will not be reflected"));
             break;
 
-        case FSReader::FILE_ACTION_APP_READCOMPLETE:
+        case FILE_ACTION_APP_READCOMPLETE:
             ContentEstablished();
             break;
 
-        case FSReader::FILE_ACTION_APP_READRESTARTED:
+        case FILE_ACTION_APP_READRESTARTED:
             m_contentCtl.SetItemCount(0);
-            m_contentCtl.filteredItems.clear();;
+            filteredItems.clear();;
             items.clear();
             break;
 
-        case FSReader::FOLDER_RESOLVED_SOFTLINK:
+        case FOLDER_RESOLVED_SOFTLINK:
             if (auto p = dynamic_cast<LocalFSReader*>(activeReader.get()))
             {
                 m_pathCtl.metaPath.SetLocalPath(p->dir);
@@ -607,9 +563,9 @@ void CFilesPPDlg::OnNMDblclkList2(NMHDR *pNMHDR, LRESULT *pResult)
 {
     LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
 
-    if (pNMItemActivate->iItem >= 0 && pNMItemActivate->iItem < m_contentCtl.GetItemCount() && (unsigned)pNMItemActivate->iItem < m_contentCtl.filteredItems.size())
+    if (pNMItemActivate->iItem >= 0 && pNMItemActivate->iItem < m_contentCtl.GetItemCount() && (unsigned)pNMItemActivate->iItem < filteredItems.size())
     {
-        Item& item = *m_contentCtl.filteredItems[pNMItemActivate->iItem];
+        Item& item = *filteredItems[pNMItemActivate->iItem];
 
         //CString s = m_contentCtl.GetItemText(pNMItemActivate->iItem, 0);
 
@@ -771,17 +727,20 @@ void CFilesPPDlg::OnLvnGetdispinfoList2(NMHDR* pNMHDR, LRESULT* pResult)
 
     unsigned iItem = (unsigned)pItem->iItem;
 
-    if (iItem < m_contentCtl.filteredItems.size() && (pItem->mask & LVIF_TEXT)) //valid text buffer?
+    if (iItem < filteredItems.size() && (pItem->mask & LVIF_TEXT)) //valid text buffer?
     {
         switch (pItem->iSubItem)
         {
         case 0: //fill in main text
-            wcscpy_s(pItem->pszText, pItem->cchTextMax, CString(CA2CT(m_contentCtl.filteredItems[iItem]->u8Name.c_str())));
-            if (m_contentCtl.filteredItems[iItem]->isFolder()) wcscat_s(pItem->pszText, pItem->cchTextMax, m_contentCtl.filteredItems[iItem]->isMegaPath() ? _T("/") : _T("\\"));
+        {
+            CString str(CA2CT(filteredItems[iItem]->u8Name.c_str()));
+            wcsncpy_s(pItem->pszText, pItem->cchTextMax, str, min(str.GetLength(), pItem->cchTextMax-1));
+            if (filteredItems[iItem]->isFolder()) wcscat_s(pItem->pszText, pItem->cchTextMax, filteredItems[iItem]->isMegaPath() ? _T("/") : _T("\\"));
             break;
+        }
         case 1: //fill in sub item 1 text
-            if (!m_contentCtl.filteredItems[iItem]->isFolder() || m_contentCtl.filteredItems[iItem]->size() >= 0)
-                wcscpy_s(pItem->pszText, pItem->cchTextMax, CString(CA2CT(to_string(m_contentCtl.filteredItems[iItem]->size()).c_str())));
+            if (!filteredItems[iItem]->isFolder() || filteredItems[iItem]->size() >= 0)
+                wcscpy_s(pItem->pszText, pItem->cchTextMax, CString(CA2CT(to_string(filteredItems[iItem]->size()).c_str())));
             break;
         }
     }
@@ -910,8 +869,7 @@ void CFilesPPDlg::SavePlaylist()
         ofstream outfile(path);
         outfile << "[";
         int comma = 0;
-        for (auto& i : items)
-        {
+        items.for_each([&comma, &outfile](std::unique_ptr<Item>& i){
             if (auto p = dynamic_cast<ItemMegaNode*>(i.get()))
             {
                 if (comma++) { outfile << ","; }
@@ -919,7 +877,7 @@ void CFilesPPDlg::SavePlaylist()
                 outfile << OwnStr(p->mnode->getBase64Handle(), true);
                 outfile << "\"}";
             }
-        }
+        });
         outfile << "]";
         outfile.flush();
         if (outfile)
@@ -947,9 +905,9 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
         while (pos)
         {
             unsigned nItem = (unsigned)m_contentCtl.GetNextSelectedItem(pos);
-            if (nItem < m_contentCtl.filteredItems.size())
+            if (nItem < filteredItems.size())
             {
-                selectedItems->push_back(m_contentCtl.filteredItems[nItem]);
+                selectedItems->push_back(filteredItems[nItem]);
             }
         }
 
@@ -1012,17 +970,18 @@ void CFilesPPDlg::SetUserFeedbackCStr(const char* s)
 
 void CFilesPPDlg::ClearFilteredItems()
 {
-    m_contentCtl.filteredItems.clear();
+    filteredItems.clear();
 }
 
 void CFilesPPDlg::AddFilteredItem(Item* p)
 {
-    m_contentCtl.filteredItems.push_back(p);
+    //if (activeReader->NewAtTop())
+    filteredItems.add(move(p));
 }
 
 void CFilesPPDlg::DoneAddingFilteredItems()
 {
-    m_contentCtl.SetItemCount(int(m_contentCtl.filteredItems.size()));
+    m_contentCtl.SetItemCount(int(filteredItems.size()));
 }
 
 void CFilesPPDlg::SetFilterText(const string& s)
@@ -1055,10 +1014,10 @@ void CFilesPPDlg::OnLvnBegindragList2(NMHDR *pNMHDR, LRESULT *pResult)
     while (pos)
     {
         unsigned nItem = (unsigned)m_contentCtl.GetNextSelectedItem(pos);
-        if (nItem < m_contentCtl.filteredItems.size())
+        if (nItem < filteredItems.size())
         {
             std::string uncPath;
-            if (m_pathCtl.metaPath.GetDragDropUNCPath(m_contentCtl.filteredItems[nItem], uncPath))
+            if (m_pathCtl.metaPath.GetDragDropUNCPath(filteredItems[nItem], uncPath))
             {
                 string u16string;
                 m::MegaApi::utf8ToUtf16(uncPath.c_str(), &u16string);
@@ -1160,15 +1119,15 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
         CMenu m;
         m.CreatePopupMenu();
         auto favourites = g_mega->favourites.copy();
-        OwningApiPtr currAcc = nullptr;
+        OwningAccountPtr currAcc = nullptr;
         MenuActions ma;
         for (unsigned i = 0; i < favourites.size(); ++i)
         {
-            OwningApiPtr test = favourites[i].Account()->masp;
+            auto test = favourites[i].Account();
             if (test != currAcc)
             {
                 currAcc = test;
-                ma.actions.push_back(MenuActions::MenuItem{ currAcc ? OwnString(currAcc->getMyEmail()) : string("<Local>") , nullptr, true });
+                ma.actions.push_back(MenuActions::MenuItem{ currAcc ? OwnString(currAcc->masp->getMyEmail()) : string("<Local>") , nullptr, true });
             }
             ma.actions.push_back(MenuActions::MenuItem{ favourites[i].u8DisplayPath() ,[thisfavourite = favourites[i], this]()
                 {
@@ -1216,9 +1175,9 @@ void CFilesPPDlg::OnLvnItemchangedList2(NMHDR *pNMHDR, LRESULT *pResult)
         while (pos)
         {
             unsigned nItem = (unsigned)m_contentCtl.GetNextSelectedItem(pos);
-            if (nItem < m_contentCtl.filteredItems.size())
+            if (nItem < filteredItems.size())
             {
-                Item& item = *m_contentCtl.filteredItems[nItem];
+                Item& item = *filteredItems[nItem];
                 if (item.isFolder())
                 {
                     foldercount += 1;

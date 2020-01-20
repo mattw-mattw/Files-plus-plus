@@ -68,6 +68,7 @@ BOOL CFilesPPApp::InitInstance()
 	// in your application.
 	InitCtrls.dwICC = ICC_WIN95_CLASSES;
 	InitCommonControlsEx(&InitCtrls);
+	AfxInitRichEdit2();
 
 	CWinApp::InitInstance();
 

@@ -18,39 +18,47 @@ struct UserFeedback
     virtual void SetFilterText(const std::string& s) = 0;
 };
 
-struct FSReader
+typedef std::function<void()> QueueTrigger;
+
+enum Action {
+	FILE_ACTION_APP_ERROR, FILE_ACTION_APP_NOTIFY_FAILURE, FILE_ACTION_APP_READCOMPLETE, FILE_ACTION_APP_READRESTARTED, FOLDER_RESOLVED_SOFTLINK,
+	NEWITEM, DELETEDITEM, RENAMEDFROM, RENAMEDTO, INVALID_ACTION
+};
+
+struct ItemQueue
 {
-	enum Action {
-		FILE_ACTION_APP_ERROR, FILE_ACTION_APP_NOTIFY_FAILURE, FILE_ACTION_APP_READCOMPLETE, FILE_ACTION_APP_READRESTARTED, FOLDER_RESOLVED_SOFTLINK,
-		NEWITEM, DELETEDITEM, RENAMEDFROM, RENAMEDTO, INVALID_ACTION
-	};
-
-	typedef std::function<void()> QueueTrigger;
-
-	FSReader(QueueTrigger t, bool r, UserFeedback& uf) : trigger(t), recurse(r), userFeedback(uf) {}
-	virtual ~FSReader() {}
-
 	typedef std::vector<std::unique_ptr<Item>> Batch;
 	struct Entry { Action action; Batch batch; };
 	NotifyQueue<Entry> q;
+
+	Action currentaction = INVALID_ACTION;
+	Batch currentitems;
+	QueueTrigger trigger;
+
+	void Send();
+	void Queue(Action action, std::unique_ptr<Item>&& p);
+
+	ItemQueue(QueueTrigger t) : trigger(t) {}
+};
+
+
+struct FSReader
+{
+	FSReader(QueueTrigger t, bool r, UserFeedback& uf) : itemQueue(new ItemQueue(t)), recurse(r), userFeedback(uf) {}
+	virtual ~FSReader() {}
 
 	// gui thread functions
     virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) { return MenuActions(); }
     virtual void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths);
     virtual void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes);
 
+	std::shared_ptr<ItemQueue> itemQueue;
+
 protected:
 	bool recurse = false;
 
-	Action currentaction = INVALID_ACTION;
-	Batch currentitems;
-	QueueTrigger trigger;
-
     // only use this in gui thread functions
     UserFeedback& userFeedback;
-
-	void Send();
-	void Queue(Action action, std::unique_ptr<Item>&& p);
 };
 
 
@@ -148,9 +156,32 @@ private:
 	std::thread workerthread;
 };
 
+struct MegaChatReader;
+
+struct ChatRoomListener : public c::MegaChatRoomListener
+{
+	OwningAccountPtr ap;
+	c::MegaChatHandle roomId;
+	ChatRoomListener(OwningAccountPtr p, c::MegaChatHandle rid) : ap(p), roomId(rid) {}
+
+	std::mutex m;
+	std::map<c::MegaChatHandle, std::unique_ptr<c::MegaChatMessage>> messages;
+	std::set<std::shared_ptr<ItemQueue>> callbacks;
+	unsigned messageCallbackCount = 0;
+
+
+	void onChatRoomUpdate(c::MegaChatApi* api, c::MegaChatRoom* chat) override;
+	void onMessageLoaded(c::MegaChatApi* api, c::MegaChatMessage* msg) override;
+	void onMessageReceived(c::MegaChatApi* api, c::MegaChatMessage* msg) override;
+	void onMessageUpdate(c::MegaChatApi* api, c::MegaChatMessage* msg) override;
+	void onHistoryReloaded(c::MegaChatApi* api, c::MegaChatRoom* chat) override;
+	void onReactionUpdate(c::MegaChatApi* api, c::MegaChatHandle msgid, const char* reaction, int count) override;
+
+};
+
 struct MegaChatReader : public FSReader
 {
-	MegaChatReader(OwningAccountPtr p, QueueTrigger t, bool r, UserFeedback& uf);
+	MegaChatReader(OwningAccountPtr p, std::unique_ptr<c::MegaChatRoom>, QueueTrigger t, bool r, UserFeedback& uf);
 	~MegaChatReader();
 
 private:
@@ -160,12 +191,17 @@ private:
 	void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
 	auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems)->MenuActions override;
 
-	NodeUpdateListener listener;
+
+	//NotifyQueue<std::unique_ptr<m::MegaNodeList>> nq;
 	OwningAccountPtr ap;
+	std::unique_ptr<c::MegaChatRoom> chatroom;
 	//	std::unique_ptr<m::MegaNode> mnode;
 	//	std::set<::mega::MegaHandle> nodes_present;
 	bool cancelling = false;
 	std::thread workerthread;
+
+	std::shared_ptr<ChatRoomListener> listener;
+
 };
 
 

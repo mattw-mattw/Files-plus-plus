@@ -21,7 +21,7 @@ void UserFeedback::SetUserFeedbackStr(const std::string& s)
 }
 
 
-void FSReader::Send()
+void ItemQueue::Send()
 {
     if (!currentitems.empty())
     {
@@ -32,8 +32,9 @@ void FSReader::Send()
     currentaction = INVALID_ACTION;
 }
 
-void FSReader::Queue(Action action, unique_ptr<Item>&& p)
+void ItemQueue::Queue(Action action, unique_ptr<Item>&& p)
 {
+    // todo: needs to be thread safe now
     if (currentitems.size() >= 100 || (currentaction != action && !(action == RENAMEDFROM && currentaction == RENAMEDFROM)))
     {
         Send();
@@ -71,29 +72,29 @@ void TopShelfReader::Threaded()
     {
         int fluc = g_mega->accountsUpdateCount;
 
-        Queue(NEWITEM, std::make_unique<Item>("<Local Volumes>"));
+        itemQueue->Queue(NEWITEM, std::make_unique<Item>("<Local Volumes>"));
         auto megaAccounts = g_mega->accounts();
         for (auto& p : megaAccounts)
         {
             OwnString email(p->masp->getMyEmail());
-            Queue(NEWITEM, std::make_unique<ItemMegaAccount>(email.empty() ? string("<loading>") : email, p));
+            itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaAccount>(email.empty() ? string("<loading>") : email, p));
         }
         auto megaFolders = g_mega->folderLinks();
         for (auto& p : megaFolders)
         {
-            Queue(NEWITEM, std::make_unique<ItemMegaAccount>(p->folderLink, p));
+            itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaAccount>(p->folderLink, p));
         }
-        Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-        Queue(NEWITEM, std::make_unique<Item>("<MEGA Command History>"));
-        Send();
+        itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+        itemQueue->Queue(NEWITEM, std::make_unique<Item>("<MEGA Command History>"));
+        itemQueue->Send();
 
         unique_lock<mutex> g(g_mega->updateCVMutex);
         g_mega->updateCV.wait(g, [&]() { return cancelling || fluc != g_mega->accountsUpdateCount;  });
 
         if (!cancelling)
         {
-            Queue(FILE_ACTION_APP_READRESTARTED, NULL);
-            Send();
+            itemQueue->Queue(FILE_ACTION_APP_READRESTARTED, NULL);
+            itemQueue->Send();
         }
         else break;
     }
@@ -156,8 +157,6 @@ auto MegaAccountReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> select
 
 void MegaAccountReader::Threaded()
 {
-    // todo: make sure readers are destroyed so shared ptr is released
-
     auto acc = wap.lock();
     if (!acc) return;
     auto& masp = acc->masp;
@@ -166,23 +165,23 @@ void MegaAccountReader::Threaded()
     unique_ptr<m::MegaNode> inbox(masp->getInboxNode());
     unique_ptr<m::MegaNode> rubbish(masp->getRubbishNode());
 
-    Queue(NEWITEM, std::make_unique<ItemMegaChatRoot>(acc->chatState, acc));
+    itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaChatRoot>(acc->chatState, acc));
 
-    if (root) Queue(NEWITEM, std::make_unique<ItemMegaNode>(root->getName(), move(root)));
-    if (inbox) Queue(NEWITEM, std::make_unique<ItemMegaNode>(inbox->getName(), move(inbox)));
-    if (rubbish) Queue(NEWITEM, std::make_unique<ItemMegaNode>(rubbish->getName(), move(rubbish)));
+    if (root) itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(root->getName(), move(root)));
+    if (inbox) itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(inbox->getName(), move(inbox)));
+    if (rubbish) itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(rubbish->getName(), move(rubbish)));
 
     unique_ptr<m::MegaNodeList> inshares(masp->getInShares());
     if (inshares)
     {
         for (int i = 0; i < inshares->size(); ++i)
         {
-            Queue(NEWITEM, std::make_unique<ItemMegaInshare>(std::unique_ptr<m::MegaNode>(inshares->get(i)->copy()), *masp, -1, true));
+            itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaInshare>(std::unique_ptr<m::MegaNode>(inshares->get(i)->copy()), *masp, -1, true));
         }
     }
 
-    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-    Send();
+    itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    itemQueue->Send();
 }
 
 MegaFSReader::MegaFSReader(OwningAccountPtr p, std::unique_ptr<m::MegaNode> n, QueueTrigger t, bool r, UserFeedback& uf)
@@ -319,7 +318,7 @@ void MegaFSReader::RecursiveRead(m::MegaNode& mnode, const string& basepath)
             auto node = folders->get(i);
             nodes_present.insert(node->getHandle());
             OwnStr path(masp->getNodePath(node), true);
-            Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
+            itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
             if (recurse) RecursiveRead(*node, basepath);
         }
         for (int i = 0; i < files->size(); ++i)
@@ -327,7 +326,7 @@ void MegaFSReader::RecursiveRead(m::MegaNode& mnode, const string& basepath)
             auto node = files->get(i);
             nodes_present.insert(node->getHandle());
             OwnStr path(masp->getNodePath(node), true);
-            Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
+            itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
         }
     }
 }
@@ -353,8 +352,8 @@ void MegaFSReader::Threaded()
         string basepath(basepathptr.get());
         if (basepath == "/") basepath = "";
         RecursiveRead(*mnode, basepath);
-        Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-        Send();
+        itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+        itemQueue->Send();
 
         while (!cancelling && !reload_needed)
         {
@@ -365,7 +364,7 @@ void MegaFSReader::Threaded()
                 if (!nodes)
                 {
                     // MEGA callback says to reload, due to too many changes
-                    Queue(FILE_ACTION_APP_READRESTARTED, NULL);
+                    itemQueue->Queue(FILE_ACTION_APP_READRESTARTED, NULL);
                     reload_needed = true;
                     break;
                 }
@@ -381,7 +380,7 @@ void MegaFSReader::Threaded()
                             {
                                 if (nodes_present.find(n->getHandle()) != nodes_present.end())
                                 {
-                                    Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(n->getName(), std::unique_ptr<m::MegaNode>(n->copy())));
+                                    itemQueue->Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(n->getName(), std::unique_ptr<m::MegaNode>(n->copy())));
                                     nodes_present.erase(n->getHandle());
                                 }
                             }
@@ -390,15 +389,15 @@ void MegaFSReader::Threaded()
                                 OwnStr path(masp->getNodePath(n), true);
                                 string name(removebase(path, basepath));
                                 nodes_present.insert(n->getHandle());
-                                Queue(NEWITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                                itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
 
                             }
                             else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_ATTRIBUTES)) // could be renamed
                             {
                                 OwnStr path(masp->getNodePath(n), true);
                                 string name(removebase(path, basepath));
-                                Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
-                                Queue(NEWITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                                itemQueue->Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                                itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
                             }
                         }
                         else if (n->hasChanged(m::MegaNode::CHANGE_TYPE_PARENT))
@@ -407,13 +406,13 @@ void MegaFSReader::Threaded()
                             {
                                 OwnStr path(masp->getNodePath(n), true);
                                 string name(removebase(path, basepath));
-                                Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
+                                itemQueue->Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
                                 nodes_present.erase(n->getHandle());
                             }
                         }
                     }
                 }
-                Send();
+                itemQueue->Send();
             }
         }
         if (!reload_needed) break;
@@ -479,41 +478,226 @@ void MegaChatRoomsReader::Threaded()
         for (unsigned i = 0; i < crl->size(); ++i)
         {
             std::unique_ptr<c::MegaChatRoom> up(crl->get(i)->copy());
-            string name = OwnString(up->getTitle());
-            Queue(NEWITEM, std::make_unique<ItemMegaChat>(name, move(up)));
+            string name = up->getTitle();
+            itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaChat>(name, move(up)));
         }
     }
-    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-    Send();
+    itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    itemQueue->Send();
 
     ap->masp->removeGlobalListener(&listener);
 }
 
 
-MegaChatReader::MegaChatReader(OwningAccountPtr p, QueueTrigger t, bool r, UserFeedback& uf)
+    /**
+ * @brief This function is called when there are changes in the chatroom
+ *
+ * The changes can include: a user join/leaves the chatroom, a user changes its name,
+ * the unread messages count has changed, the online state of the connection to the
+ * chat server has changed, the chat becomes archived/unarchived, there is a new call
+ * or a call has finished, the chat has been changed into private mode, the number of
+ * previewers has changed, the user has started/stopped typing.
+ *
+ * @param api MegaChatApi connected to the account
+ * @param chat MegaChatRoom that contains the updates relatives to the chat
+ */
+void ChatRoomListener::onChatRoomUpdate(c::MegaChatApi* api, c::MegaChatRoom* chat)
+{
+}
+
+/**
+    * @brief This function is called when new messages are loaded
+    *
+    * You can use MegaChatApi::loadMessages to request loading messages.
+    *
+    * When there are no more message to load from the source reported by MegaChatApi::loadMessages or
+    * there are no more history at all, this function is also called, but the second parameter will be NULL.
+    *
+    * The SDK retains the ownership of the MegaChatMessage in the second parameter. The MegaChatMessage
+    * object will be valid until this function returns. If you want to save the MegaChatMessage object,
+    * use MegaChatMessage::copy for the message.
+    *
+    * @param api MegaChatApi connected to the account
+    * @param msg The MegaChatMessage object, or NULL if no more history available.
+    */
+void ChatRoomListener::onMessageLoaded(c::MegaChatApi* api, c::MegaChatMessage* msg)
+{
+    if (msg)
+    {
+        std::set<std::shared_ptr<ItemQueue>> cb;
+        {
+            std::lock_guard g(m);
+            messages[msg->getMsgId()].reset(msg->copy());
+            cb = callbacks;
+        }
+        for (auto& c : cb) {
+            c->Queue(NEWITEM, std::make_unique<ItemMegaChatMessage>(std::unique_ptr<c::MegaChatMessage>(msg->copy())));
+        }
+        messageCallbackCount += 1;
+    }
+    else
+    {
+        if (messageCallbackCount > 0)
+        {
+            std::set<std::shared_ptr<ItemQueue>> cb;
+            {
+                std::lock_guard g(m);
+                cb = callbacks;
+            }
+            for (auto& c : cb) c->Send();
+
+            messageCallbackCount = 0;
+            switch (ap->mcsp->loadMessages(roomId, 20))
+            {
+            case c::MegaChatApi::SOURCE_ERROR:  ap->masp->log(m::MegaApi::LOG_LEVEL_INFO, "MegaChatApi::SOURCE_ERROR"); break;
+            case c::MegaChatApi::SOURCE_NONE: ap->masp->log(m::MegaApi::LOG_LEVEL_INFO, "MegaChatApi::SOURCE_NONE"); break;
+            case c::MegaChatApi::SOURCE_LOCAL: ap->masp->log(m::MegaApi::LOG_LEVEL_INFO, "loading local messages"); break;
+            case c::MegaChatApi::SOURCE_REMOTE: ap->masp->log(m::MegaApi::LOG_LEVEL_INFO, "loading remote messages"); break;
+            default:  ap->masp->log(m::MegaApi::LOG_LEVEL_INFO, "Chat load unexpected return value"); break;
+            }
+        }
+        else
+        {
+            ap->masp->log(m::MegaApi::LOG_LEVEL_INFO, "all messags loaded");
+        }
+    }
+}
+
+/**
+    * @brief This function is called when a new message is received
+    *
+    * The SDK retains the ownership of the MegaChatMessage in the second parameter. The MegaChatMessage
+    * object will be valid until this function returns. If you want to save the MegaChatMessage object,
+    * use MegaChatMessage::copy for the message.
+    *
+    * @param api MegaChatApi connected to the account
+    * @param msg MegaChatMessage representing the received message
+    */
+void ChatRoomListener::onMessageReceived(c::MegaChatApi* api, c::MegaChatMessage* msg)
+{
+    std::set<std::shared_ptr<ItemQueue>> cb;
+    {
+        std::lock_guard g(m);
+        messages[msg->getMsgId()].reset(msg->copy());
+        cb = callbacks;
+    }
+    for (auto& c : cb) {
+        c->Queue(NEWITEM, std::make_unique<ItemMegaChatMessage>(std::unique_ptr<c::MegaChatMessage>(msg->copy())));
+        c->Send();
+    }
+}
+
+/**
+    * @brief This function is called when an existing message is updated
+    *
+    * i.e. When a submitted message is confirmed by the server, the status chages
+    * to MegaChatMessage::STATUS_SERVER_RECEIVED and its message id is considered definitive.
+    *
+    * An important case is when the edition of a message is rejected. In those cases, the message
+    * status of \c msg will be MegaChatMessage::STATUS_SENDING_MANUAL and the app reason of rejection
+    * is recorded in MegaChatMessage::getCode().
+    *
+    * Another edge case is when a new message was confirmed but the app didn't receive the confirmation
+    * from the server. In that case, you will end up with a message in MegaChatMessage::STATUS_SENDING
+    * due to the sending retry, another one in MegaChatMessage::STATUS_SERVER_RECEIVED or
+    * MegaChatMessage::STATUS_DELIVERED due to the message already confirmed/delivered. Finally, you
+    * will receive this callback updating the status to MegaChatMessage::STATUS_SERVER_REJECTED with
+    * MegaChatMessage::getCode() equal to 0 and the corresponding MegaChatMessage::getTempId().
+    * The app should discard the message in sending status, in pro of the confirmed message to avoid
+    * duplicated message in the history.
+    * @note if MegaChatApi::isMessageReceptionConfirmationActive returns false, messages may never
+    * reach the status delivered, since the target user will not send the required acknowledge to the
+    * server upon reception.
+    *
+    * The SDK retains the ownership of the MegaChatMessage in the second parameter. The MegaChatMessage
+    * object will be valid until this function returns. If you want to save the MegaChatMessage object,
+    * use MegaChatMessage::copy for the message.
+    *
+    * @param api MegaChatApi connected to the account
+    * @param msg MegaChatMessage representing the updated message
+    */
+void ChatRoomListener::onMessageUpdate(c::MegaChatApi* api, c::MegaChatMessage* msg)
+{
+    std::set<std::shared_ptr<ItemQueue>> cb;
+    {
+        std::lock_guard g(m);
+        messages[msg->getMsgId()].reset(msg->copy());
+        cb = callbacks;
+    }
+    for (auto& c : cb) {
+        c->Queue(NEWITEM, std::make_unique<ItemMegaChatMessage>(std::unique_ptr<c::MegaChatMessage>(msg->copy())));
+        c->Send();
+    }
+}
+
+/**
+    * @brief This function is called when the local history of a chatroom is about to be discarded and
+    * reloaded from server.
+    *
+    * Server can reject to provide all new messages if there are too many since last connection. In that case,
+    * all the locally-known history will be discarded (both from memory and cache) and the server will provide
+    * the most recent messages in this chatroom.
+    *
+    * @note When this callback is received, any reference to messages should be discarded. New messages will be
+    * loaded from server and notified as in the case where there's no cached messages at all.
+    *
+    * @param api MegaChatApi connected to the account
+    * @param chat MegaChatRoom whose local history is about to be discarded
+    */
+void ChatRoomListener::onHistoryReloaded(c::MegaChatApi* api, c::MegaChatRoom* chat)
+{}
+
+
+/**
+    * @brief This function is called when a message has been reacted (or an existing reaction has been removed)
+    *
+    * @param api MegaChatApi connected to the account
+    * @param msgid MegaChatHandle that identifies the message
+    * @param reaction UTF-8 NULL-terminated string that represents the reaction
+    * @param count Number of users who have reacted to this message with the same reaction
+    */
+void ChatRoomListener::onReactionUpdate(c::MegaChatApi* api, c::MegaChatHandle msgid, const char* reaction, int count)
+{}
+
+
+MegaChatReader::MegaChatReader(OwningAccountPtr p, std::unique_ptr<c::MegaChatRoom> cp, QueueTrigger t, bool r, UserFeedback& uf)
     : FSReader(t, r, uf)
     , ap(p)
+    , chatroom(move(cp))
     , workerthread([this]() { Threaded(); })
 {
+    listener = ap->getChatListener(chatroom->getChatId(), itemQueue);
 }
 
 MegaChatReader::~MegaChatReader()
 {
+    ap->deregisterFromChatListener(chatroom->getChatId(), itemQueue);
+
     cancelling = true;
-    listener.nq.push(nullptr);
+    //nq.push(nullptr);
     workerthread.join();
 }
 
 auto MegaChatReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
 {
     MenuActions ma;
+
+    ma.actions.emplace_back("Send New Message", [this]()
+    {
+        string msg;
+        if (InputUserChatMessage(msg))
+        {
+            ap->mcsp->sendMessage(chatroom->getChatId(), msg.c_str());
+        }
+    });
+
     if (selectedItems->size())
     {
-
         if (selectedItems->size() == 1)
         {
             if (auto n = dynamic_cast<ItemMegaNode*>(selectedItems->front()))
             {
+
                 //ma.actions.emplace_back("Export Link", [=, masp = masp]()
                 //{
                 //    masp->exportNode(n->mnode.get(), new MRequest(masp, "Export Link", [&](m::MegaRequest* request, m::MegaError* e) {
@@ -522,7 +706,6 @@ auto MegaChatReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> M
                 //});
             }
         }
-
     }
     return ma;
 };
@@ -539,18 +722,9 @@ void MegaChatReader::OnDragDroppedLocalItems(const std::deque<std::filesystem::p
 
 void MegaChatReader::Threaded()
 {
-    ap->masp->addGlobalListener(&listener);
-
-    //    for (;;)
-    {
-        //      Queue(NEWITEM, std::make_unique<ItemMegaNode>(name, std::unique_ptr<m::MegaNode>(n->copy())));
-    }
-    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-    Send();
-
-    ap->masp->removeGlobalListener(&listener);
+    itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    itemQueue->Send();
 }
-
 
 CommandHistoryReader::CommandHistoryReader(QueueTrigger t, UserFeedback& uf)
     : FSReader(t, false, uf)
@@ -574,11 +748,11 @@ void CommandHistoryReader::Threaded()
     auto history = g_mega->getRequestHistory();
     for (auto& c : history)
     {
-        Queue(NEWITEM, std::make_unique<ItemCommand>(c));
+        itemQueue->Queue(NEWITEM, std::make_unique<ItemCommand>(c));
     }
 
-    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-    Send();
+    itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    itemQueue->Send();
 }
 
 PlaylistReader::PlaylistReader(const std::filesystem::path& path, QueueTrigger t, bool r, UserFeedback& uf)
@@ -603,10 +777,10 @@ auto PlaylistReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedI
         {
             if (auto p = dynamic_cast<ItemMegaNode*>(item))
             {
-                Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(string(p->mnode->getName()), std::unique_ptr<m::MegaNode>(p->mnode->copy())));
+                itemQueue->Queue(DELETEDITEM, std::make_unique<ItemMegaNode>(string(p->mnode->getName()), std::unique_ptr<m::MegaNode>(p->mnode->copy())));
             }
         }
-        Send();
+        itemQueue->Send();
     });
     return ma;
 }
@@ -615,9 +789,9 @@ void PlaylistReader::OnDragDroppedMEGAItems(OwningApiPtr source_masp, const dequ
 {
     for (auto& n : nodes)
     {
-        Queue(NEWITEM, std::make_unique<ItemMegaNode>(string(n->getName()), std::unique_ptr<m::MegaNode>(n->copy())));
+        itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(string(n->getName()), std::unique_ptr<m::MegaNode>(n->copy())));
     }
-    Send();
+    itemQueue->Send();
 }
 
 void PlaylistReader::Threaded()
@@ -636,7 +810,7 @@ void PlaylistReader::Threaded()
 
     if (!file && !file.eof())
     {
-        Queue(FILE_ACTION_APP_ERROR, NULL);
+        itemQueue->Queue(FILE_ACTION_APP_ERROR, NULL);
         return;
     }
 
@@ -659,7 +833,7 @@ void PlaylistReader::Threaded()
                     case EOO:
                         if (auto p = g_mega->findNode(h))
                         {
-                            Queue(NEWITEM, std::make_unique<ItemMegaNode>(string(p->getName()), std::move(p)));
+                            itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(string(p->getName()), std::move(p)));
                         }
                         goto breakInnerFor;
                     default:
@@ -674,6 +848,6 @@ void PlaylistReader::Threaded()
         json.leavearray();
     }
 
-    Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-    Send();
+    itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    itemQueue->Send();
 }
