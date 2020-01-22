@@ -27,8 +27,6 @@ std::shared_ptr<ChatRoomListener> Account::getChatListener(c::MegaChatHandle roo
     if (open) {
         if (mcsp->openChatRoom(roomid, p.get()))
         {
-            p->messageCallbackCount = 1;
-            p->onMessageLoaded(mcsp.get(), nullptr);
         }
         else assert(false);
     }
@@ -36,8 +34,11 @@ std::shared_ptr<ChatRoomListener> Account::getChatListener(c::MegaChatHandle roo
         for (auto& i : catchupMessages) {
             iq->Queue(NEWITEM, std::make_unique<ItemMegaChatMessage>(move(i.second)));
         }
-        iq->Send();
+        //iq->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+        //iq->Send();
     }
+    p->messageCallbackCount = 1;
+    p->onMessageLoaded(mcsp.get(), nullptr);
     return p;
 }
 

@@ -41,6 +41,14 @@ struct ItemQueue
 	ItemQueue(QueueTrigger t) : trigger(t) {}
 };
 
+struct ColumnDef
+{
+	std::string name;
+	unsigned width;
+	std::function<std::string(const Item*)> valueFunc = [](const Item* i){ return i->u8Name; };
+	std::function<int64_t(const Item*)> intFunc = nullptr;
+	std::function<int64_t(const Item*)> initialSort = nullptr;
+};
 
 struct FSReader
 {
@@ -53,6 +61,8 @@ struct FSReader
     virtual void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes);
 
 	std::shared_ptr<ItemQueue> itemQueue;
+
+	std::vector<ColumnDef> columnDefs;
 
 protected:
 	bool recurse = false;

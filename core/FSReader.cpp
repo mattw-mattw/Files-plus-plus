@@ -57,6 +57,7 @@ TopShelfReader::TopShelfReader(QueueTrigger t, bool r, UserFeedback& uf)
     : FSReader(t, r, uf)
     , workerthread([this]() { Threaded(); })
 {
+    columnDefs.push_back(ColumnDef{"Name", 200});
 }
 
 TopShelfReader::~TopShelfReader()
@@ -142,6 +143,7 @@ MegaAccountReader::MegaAccountReader(WeakAccountPtr p, QueueTrigger t, bool r, U
     , wap(p)
     , workerthread([this]() { Threaded(); })
 {
+    columnDefs.push_back(ColumnDef{"Name", 200});
 }
 
 MegaAccountReader::~MegaAccountReader()
@@ -190,6 +192,8 @@ MegaFSReader::MegaFSReader(OwningAccountPtr p, std::unique_ptr<m::MegaNode> n, Q
     , mnode(move(n))
     , workerthread([this]() { Threaded(); })
 {
+    columnDefs.push_back(ColumnDef{"Name", 200, [](const Item* i){ return i->u8Name + (i->isFolder() ? "/" : ""); }});
+    columnDefs.push_back(ColumnDef{"Size", 50, [](const Item* i){ return i->size() < 0 ? "" : to_string(i->size()); }});
 }
 
 MegaFSReader::~MegaFSReader()
@@ -426,6 +430,7 @@ MegaChatRoomsReader::MegaChatRoomsReader(OwningAccountPtr p, QueueTrigger t, boo
     , ap(p)
     , workerthread([this]() { Threaded(); })
 {
+    columnDefs.push_back(ColumnDef{"Name", 200});
 }
 
 MegaChatRoomsReader::~MegaChatRoomsReader()
@@ -558,6 +563,15 @@ void ChatRoomListener::onMessageLoaded(c::MegaChatApi* api, c::MegaChatMessage* 
         }
         else
         {
+            std::set<std::shared_ptr<ItemQueue>> cb;
+            {
+                std::lock_guard g(m);
+                cb = callbacks;
+            }
+            for (auto& c : cb) {
+                c->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+                c->Send();
+            }
             ap->masp->log(m::MegaApi::LOG_LEVEL_INFO, "all messags loaded");
         }
     }
@@ -667,6 +681,16 @@ MegaChatReader::MegaChatReader(OwningAccountPtr p, std::unique_ptr<c::MegaChatRo
     , workerthread([this]() { Threaded(); })
 {
     listener = ap->getChatListener(chatroom->getChatId(), itemQueue);
+
+    columnDefs.push_back(ColumnDef{"Id", 50, [](const Item* i){ return to_string(static_cast<const ItemMegaChatMessage*>(i)->message->getMsgIndex()); },
+                                             [](const Item* i){ return int64_t(static_cast<const ItemMegaChatMessage*>(i)->message->getMsgIndex()); },
+                                             [](const Item* i){ return int64_t(static_cast<const ItemMegaChatMessage*>(i)->message->getMsgIndex()); }});
+    columnDefs.push_back(ColumnDef{"Name", 100, [p](const Item* i)
+            { 
+                auto handle = static_cast<const ItemMegaChatMessage*>(i)->message->getUserHandle(); 
+                return g_mega->users.Firstname(handle, *p->masp);
+            }});
+    columnDefs.push_back(ColumnDef{"Message", 500, [](const Item* i){ auto p = static_cast<const ItemMegaChatMessage*>(i)->message->getContent(); return p ? p : "<null>"; }});
 }
 
 MegaChatReader::~MegaChatReader()
@@ -722,14 +746,14 @@ void MegaChatReader::OnDragDroppedLocalItems(const std::deque<std::filesystem::p
 
 void MegaChatReader::Threaded()
 {
-    itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-    itemQueue->Send();
 }
 
 CommandHistoryReader::CommandHistoryReader(QueueTrigger t, UserFeedback& uf)
     : FSReader(t, false, uf)
     , workerthread([this]() { Threaded(); })
 {
+    columnDefs.push_back(ColumnDef{"Name", 200});
+    columnDefs.push_back(ColumnDef{"State", 200});
 }
 
 CommandHistoryReader::~CommandHistoryReader()
@@ -760,6 +784,7 @@ PlaylistReader::PlaylistReader(const std::filesystem::path& path, QueueTrigger t
     , fullFilePath(path)
     , workerthread([this]() { Threaded(); })
 {
+    columnDefs.push_back(ColumnDef{"Name", 200});
 }
 
 PlaylistReader::~PlaylistReader()

@@ -86,6 +86,47 @@ public:
     }
 };
 
+struct Users
+{
+    std::string Firstname(m::MegaHandle h, m::MegaApi& ma)
+    {
+        std::lock_guard g(m);
+        user& u = users[h];
+        if (u.requestedFirstname) return u.firstname;
+
+        auto i = contacts.find(h);
+        if (i == contacts.end())
+        {
+            std::unique_ptr<m::MegaUserList> c(ma.getContacts());
+            for (int i = c->size(); i--; ) contacts[c->get(i)->getHandle()].reset(c->get(i)->copy());
+            i = contacts.find(h);
+        }
+        if (i != contacts.end())
+        {
+            u.requestedFirstname = true;
+            ma.getUserAttribute(i->second.get(), m::MegaApi::USER_ATTR_FIRSTNAME, new OneTimeListener([this, h](m::MegaRequest* request, m::MegaError* e){
+                std::lock_guard g(m);
+                if (e && !e->getErrorCode()) users[h].firstname = request->getText();
+            }));
+        }
+
+        return OwnString(m::MegaApi::handleToBase64(h));
+    }
+
+private:
+    struct user
+    {
+        std::string firstname;
+        std::string email;
+
+        bool requestedFirstname = false;
+        bool requestedEmail = false;
+    };
+    std::mutex m;
+    std::map<m::MegaHandle, user> users;
+    std::map<m::MegaHandle, std::unique_ptr<m::MegaUser>> contacts;
+};
+
 
 struct MEGA
 {
@@ -126,6 +167,8 @@ struct MEGA
 
     static std::string ToBase64(const std::string& s);
     static std::string FromBase64(const std::string& s);
+
+    Users users;
 
 private:
 	std::mutex m;

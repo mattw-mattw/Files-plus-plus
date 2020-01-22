@@ -73,7 +73,22 @@ END_MESSAGE_MAP()
 IMPLEMENT_DYNAMIC(ItemListCtrl, CMFCListCtrl);
 BEGIN_MESSAGE_MAP(ItemListCtrl, CMFCListCtrl)
     ON_WM_DROPFILES()
+    ON_NOTIFY_REFLECT_EX(LVN_GETINFOTIP, OnGetInfoTip)
 END_MESSAGE_MAP()
+
+BOOL ItemListCtrl::OnGetInfoTip(NMHDR* pNMHDR, LRESULT* pResult)
+{
+    // Will only request tooltip for the label-column
+    NMLVGETINFOTIP* pInfoTip = (NMLVGETINFOTIP*)pNMHDR;
+    CString tooltip = L"did it work";
+    if (!tooltip.IsEmpty())
+    {
+        _tcsncpy(pInfoTip->pszText, static_cast<LPCTSTR>(tooltip), pInfoTip->cchTextMax);
+    }
+    return FALSE;    // Let parent-dialog get chance
+}
+
+
 
 void ItemListCtrl::OnDropFiles(HDROP hDropInfo)
 {
@@ -82,20 +97,42 @@ void ItemListCtrl::OnDropFiles(HDROP hDropInfo)
 
 void ItemListCtrl::Sort(int iColumn, BOOL bAscending, BOOL bAdd)
 {
+    Sort(iColumn, bAscending, bAdd, false);
+}
 
-    auto sortFunction = [this, iColumn, bAscending](const Item* a, const Item* b) {
-        return iColumn == 0
-            ? (bAscending ? a->u8Name > b->u8Name : a->u8Name < b->u8Name)
-            : (bAscending ? a->size() > b->size() : a->size() < b->size()); };
+void ItemListCtrl::Sort(int iColumn, BOOL bAscending, BOOL bAdd, bool initial)
+{
+    if (iColumn < dlg.activeReader->columnDefs.size())
+    {
+        std::function<bool(const Item* a, const Item* b)> sortFunction;
+        if (initial)
+        {
+            auto f = dlg.activeReader->columnDefs[iColumn].initialSort;
+            if (!f) return;
+            sortFunction = [f](const Item* a, const Item* b) { return f(a) < f(b); };
+        }
+        else if (dlg.activeReader->columnDefs[iColumn].intFunc)
+        {
+            auto f = dlg.activeReader->columnDefs[iColumn].intFunc;
+            if (bAscending) sortFunction = [f](const Item* a, const Item* b) { return f(a) < f(b); };
+            else            sortFunction = [f](const Item* a, const Item* b) { return f(b) < f(a); };
+        }
+        else
+        {
+            auto f = dlg.activeReader->columnDefs[iColumn].valueFunc;
+            if (bAscending) sortFunction = [f](const Item* a, const Item* b) { return f(a) < f(b); };
+            else            sortFunction = [f](const Item* a, const Item* b) { return f(b) < f(a); };
+        }
 
-    dlg.filteredItems.sort(sortFunction);
+        dlg.filteredItems.sort(sortFunction);
 
-    GetHeaderCtrl().SetSortColumn(iColumn, bAscending, bAdd);
+        GetHeaderCtrl().SetSortColumn(iColumn, bAscending, bAdd);
 
-    m_iSortedColumn = iColumn;
-    m_bAscending = bAscending;
+        m_iSortedColumn = iColumn;
+        m_bAscending = bAscending;
 
-    InvalidateRect(NULL);
+        InvalidateRect(NULL);
+    }
 }
 
 
@@ -302,6 +339,7 @@ BOOL CFilesPPDlg::OnInitDialog()
     m_contentCtl.InsertColumn(0, _T("Name"), LVCFMT_LEFT, 200, 0);
     m_contentCtl.InsertColumn(1, _T("Size"), LVCFMT_RIGHT, 100, 1);
     m_contentCtl.InsertColumn(2, _T(""), LVCFMT_RIGHT, 10, 2);  // nothing shown for this one - makes autosizing work better
+    m_contentCtl.SetExtendedStyle(LVS_EX_INFOTIP |  m_contentCtl.GetExtendedStyle());
 
     if (auto statBarPlaceholder = GetDlgItem(IDC_STATUSBARPLACEHOLDER))
     {
@@ -356,6 +394,15 @@ void CFilesPPDlg::LoadContent(bool resetFilter)
     QueueTrigger t = [wnd = m_hWnd]() { ::PostMessage(wnd, WM_APP_CONTENTUPDATE, (WPARAM)0, (LPARAM)0); };
 
     activeReader = m_pathCtl.metaPath.GetContentReader(t, filterSettings.recursesubfolders, *this);
+
+    while (m_contentCtl.GetHeaderCtrl().GetItemCount() > 0) m_contentCtl.DeleteColumn(0);
+
+    int col = 0;
+    for (auto& cd : activeReader->columnDefs)
+    {
+        m_contentCtl.InsertColumn(col++, CA2CT(cd.name.c_str()), cd.intFunc ? LVCFMT_RIGHT : LVCFMT_LEFT, cd.width, 1);
+    }
+    m_contentCtl.InsertColumn(col, _T(""), LVCFMT_RIGHT, 10, 2);  // nothing shown for this one - makes autosizing work better    
 }
 
 
@@ -445,6 +492,15 @@ LRESULT CFilesPPDlg::OnContentUpdate(WPARAM wParam, LPARAM lParam)
 
 void CFilesPPDlg::ContentEstablished()
 {
+    for (size_t col = activeReader->columnDefs.size(); col--; )
+    {
+        if (activeReader->columnDefs[col].initialSort)
+        {
+            m_contentCtl.Sort(int(col), TRUE, FALSE, true);
+            break;
+        }
+    }
+
     int fullwidth = 0;
     for (int i = 0; i < m_contentCtl.GetHeaderCtrl().GetItemCount(); ++i)
     {
@@ -727,25 +783,39 @@ void CFilesPPDlg::OnLvnGetdispinfoList2(NMHDR* pNMHDR, LRESULT* pResult)
 
     unsigned iItem = (unsigned)pItem->iItem;
 
-    if (iItem < filteredItems.size() && (pItem->mask & LVIF_TEXT)) //valid text buffer?
+    if (iItem < filteredItems.size() && (pItem->mask & LVIF_TEXT) && //valid text buffer?
+        pItem->iSubItem < activeReader->columnDefs.size()) 
     {
-        switch (pItem->iSubItem)
+        if (auto& f = activeReader->columnDefs[pItem->iSubItem].valueFunc)
         {
-        case 0: //fill in main text
-        {
-            CString str(CA2CT(filteredItems[iItem]->u8Name.c_str()));
+            CString str(CA2CT(f(filteredItems[iItem]).c_str()));
             wcsncpy_s(pItem->pszText, pItem->cchTextMax, str, min(str.GetLength(), pItem->cchTextMax-1));
-            if (filteredItems[iItem]->isFolder()) wcscat_s(pItem->pszText, pItem->cchTextMax, filteredItems[iItem]->isMegaPath() ? _T("/") : _T("\\"));
-            break;
-        }
-        case 1: //fill in sub item 1 text
-            if (!filteredItems[iItem]->isFolder() || filteredItems[iItem]->size() >= 0)
-                wcscpy_s(pItem->pszText, pItem->cchTextMax, CString(CA2CT(to_string(filteredItems[iItem]->size()).c_str())));
-            break;
         }
     }
     *pResult = 0;
 }
+
+//INT_PTR ItemListCtrl::OnToolHitTest(CPoint point, TOOLINFO* pTI) const 
+//{
+//   // CPoint pt(GetMessagePos());
+//    ScreenToClient(&point);
+//
+//    int nRow, nCol;
+//    CellHitTest(point, nRow, nCol);
+//
+//    //Get the client (area occupied by this control)
+//    RECT rcClient;
+//    GetClientRect( &rcClient );
+//
+//    //Fill in the TOOLINFO structure
+//    pTI->hwnd = m_hWnd;
+//    pTI->uId = (UINT) (nRow * 1000 + nCol);
+//    // Send TTN_NEEDTEXT when tooltip should be shown
+//    pTI->lpszText = LPSTR_TEXTCALLBACK;
+//    pTI->rect = rcClient;
+//
+//    return pTI->uId;
+//}
 
 
 void CFilesPPDlg::OnDropFiles(HDROP hDropInfo)

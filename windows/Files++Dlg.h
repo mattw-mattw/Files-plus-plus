@@ -31,9 +31,13 @@ class ItemListCtrl : public CMFCListCtrl
     void OnDropFiles(HDROP hDropInfo);
     CFilesPPDlg& dlg;
 
+	void PreSubclassWindow() override { CMFCListCtrl::PreSubclassWindow(); EnableToolTips(TRUE);  }
+	BOOL ItemListCtrl::OnGetInfoTip(NMHDR* pNMHDR, LRESULT* pResult);
+
 public:
     ItemListCtrl(CFilesPPDlg& d) : dlg(d) {}
 	void Sort(int iColumn, BOOL bAscending, BOOL bAdd ) override;
+	void Sort(int iColumn, BOOL bAscending, BOOL bAdd, bool initial );
 };
 
 class Filter

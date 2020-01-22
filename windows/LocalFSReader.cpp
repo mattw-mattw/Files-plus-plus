@@ -11,6 +11,8 @@ LocalVolumeReader::LocalVolumeReader(QueueTrigger t, bool r, UserFeedback& uf)
     : FSReader(t, r, uf)
     , workerthread([this]() { Threaded(); })
 {
+    columnDefs.push_back(ColumnDef{"Name", 200});
+    columnDefs.push_back(ColumnDef{"Size", 50, [](const Item* i){ return to_string(i->size()); }});
 }
 
 LocalVolumeReader::~LocalVolumeReader()
@@ -53,6 +55,9 @@ LocalFSReader::LocalFSReader(fs::path p, QueueTrigger t, bool r, UserFeedback& u
 {
     memset(&overlapped, 0, sizeof(overlapped));
     workerthread = std::thread([this]() { Threaded(); });
+
+    columnDefs.push_back(ColumnDef{"Name", 200, [](const Item* i){ return i->u8Name + (i->isFolder() ? "\\" : ""); }});
+    columnDefs.push_back(ColumnDef{"Size", 50, [](const Item* i){ return i->size() < 0 ? "" : to_string(i->size()); }});
 }
 
 LocalFSReader::~LocalFSReader()
