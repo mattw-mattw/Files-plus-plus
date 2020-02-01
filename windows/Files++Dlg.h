@@ -33,11 +33,13 @@ class ItemListCtrl : public CMFCListCtrl
 
 	void PreSubclassWindow() override { CMFCListCtrl::PreSubclassWindow(); EnableToolTips(TRUE);  }
 	BOOL ItemListCtrl::OnGetInfoTip(NMHDR* pNMHDR, LRESULT* pResult);
+	BOOL ItemListCtrl::OnTTNNeedText( UINT id, NMHDR * pNMHDR, LRESULT * pResult );
 
 public:
     ItemListCtrl(CFilesPPDlg& d) : dlg(d) {}
 	void Sort(int iColumn, BOOL bAscending, BOOL bAdd ) override;
 	void Sort(int iColumn, BOOL bAscending, BOOL bAdd, bool initial );
+	INT_PTR OnToolHitTest(CPoint point, TOOLINFO* pTI) const ;
 };
 
 class Filter
@@ -274,6 +276,8 @@ public:
 	afx_msg void OnNMDblclkList2(NMHDR *pNMHDR, LRESULT *pResult);
 	afx_msg void OnBnClickedButton2();
 	CButton m_filterButton;
+	afx_msg void OnGetInfoTip(NMHDR* pNMHDR, LRESULT* pResult);
+	BOOL OnTTNNeedText( UINT id, NMHDR * pNMHDR, LRESULT * pResult );
 	afx_msg void OnLvnGetdispinfoList2(NMHDR *pNMHDR, LRESULT *pResult);
 	afx_msg void OnDropFiles(HDROP hDropInfo);
 	CStatusBarCtrl m_statusBar;

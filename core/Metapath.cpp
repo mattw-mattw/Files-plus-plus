@@ -168,6 +168,7 @@ bool MetaPath::Descend(const Item& item)
     }
     case MegaFS: {
         if (auto i = dynamic_cast<const ItemMegaNode*>(&item))
+        if (i->isFolder())
         {
             mnode.reset(i->mnode->copy());
             return true;

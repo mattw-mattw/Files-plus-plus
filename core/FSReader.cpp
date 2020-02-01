@@ -719,15 +719,18 @@ auto MegaChatReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> M
     {
         if (selectedItems->size() == 1)
         {
-            if (auto n = dynamic_cast<ItemMegaNode*>(selectedItems->front()))
+            if (auto m = dynamic_cast<ItemMegaChatMessage*>(selectedItems->front()))
             {
+                ma.actions.emplace_back("Mark as read", [ap = ap, chatid = chatroom->getChatId(), messageid = m->message->getMsgId()]()
+                {
+                    ap->mcsp->setMessageSeen(chatid, messageid);
+                });
 
-                //ma.actions.emplace_back("Export Link", [=, masp = masp]()
-                //{
-                //    masp->exportNode(n->mnode.get(), new MRequest(masp, "Export Link", [&](m::MegaRequest* request, m::MegaError* e) {
-                //        if (e && e->getErrorCode() == m::MegaError::API_OK) PutStringToClipboard(request->getLink());
-                //    }));
-                //});
+                ma.actions.emplace_back("Copy message text", [str = string(m->message->getContent())]()
+                {
+                    PutStringToClipboard(str);
+                });
+
             }
         }
     }

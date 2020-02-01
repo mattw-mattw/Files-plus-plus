@@ -6,6 +6,7 @@
 #define IDOK3                           4
 #define IDAPPLY                         4
 #define IDM_ABOUTBOX                    0x0010
+#define IDM_FONTBOX                     0x0020
 #define IDD_ABOUTBOX                    100
 #define IDP_OLE_INIT_FAILED             100
 #define IDS_ABOUTBOX                    101

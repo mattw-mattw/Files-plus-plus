@@ -73,22 +73,8 @@ END_MESSAGE_MAP()
 IMPLEMENT_DYNAMIC(ItemListCtrl, CMFCListCtrl);
 BEGIN_MESSAGE_MAP(ItemListCtrl, CMFCListCtrl)
     ON_WM_DROPFILES()
-    ON_NOTIFY_REFLECT_EX(LVN_GETINFOTIP, OnGetInfoTip)
+    ON_NOTIFY_EX(TTN_NEEDTEXT, 0, &ItemListCtrl::OnTTNNeedText)
 END_MESSAGE_MAP()
-
-BOOL ItemListCtrl::OnGetInfoTip(NMHDR* pNMHDR, LRESULT* pResult)
-{
-    // Will only request tooltip for the label-column
-    NMLVGETINFOTIP* pInfoTip = (NMLVGETINFOTIP*)pNMHDR;
-    CString tooltip = L"did it work";
-    if (!tooltip.IsEmpty())
-    {
-        _tcsncpy(pInfoTip->pszText, static_cast<LPCTSTR>(tooltip), pInfoTip->cchTextMax);
-    }
-    return FALSE;    // Let parent-dialog get chance
-}
-
-
 
 void ItemListCtrl::OnDropFiles(HDROP hDropInfo)
 {
@@ -209,7 +195,6 @@ BEGIN_MESSAGE_MAP(CFilesPPDlg, CDialogEx)
     ON_BN_CLICKED(IDC_BUTTON1, &CFilesPPDlg::OnBnClickedButton1)
     ON_NOTIFY(NM_DBLCLK, IDC_LIST2, &CFilesPPDlg::OnNMDblclkList2)
     ON_BN_CLICKED(IDC_BUTTON2, &CFilesPPDlg::OnBnClickedButton2)
-    ON_NOTIFY(LVN_GETDISPINFO, IDC_LIST2, &CFilesPPDlg::OnLvnGetdispinfoList2)
     ON_WM_DROPFILES()
     ON_NOTIFY(NM_RCLICK, IDC_LIST2, &CFilesPPDlg::OnNMRClickList2)
     ON_NOTIFY(LVN_BEGINDRAG, IDC_LIST2, &CFilesPPDlg::OnLvnBegindragList2)
@@ -220,6 +205,7 @@ BEGIN_MESSAGE_MAP(CFilesPPDlg, CDialogEx)
     ON_WM_RBUTTONDOWN()
     ON_NOTIFY(UDN_DELTAPOS, IDC_SPIN1, &CFilesPPDlg::OnDeltaposSpin1)
     ON_NOTIFY(LVN_ITEMCHANGED, IDC_LIST2, &CFilesPPDlg::OnLvnItemchangedList2)
+    ON_NOTIFY(LVN_GETDISPINFO, IDC_LIST2, &CFilesPPDlg::OnLvnGetdispinfoList2)
 END_MESSAGE_MAP()
 
 
@@ -325,6 +311,7 @@ BOOL CFilesPPDlg::OnInitDialog()
         {
             pSysMenu->AppendMenu(MF_SEPARATOR);
             pSysMenu->AppendMenu(MF_STRING, IDM_ABOUTBOX, strAboutMenu);
+            pSysMenu->AppendMenu(MF_STRING, IDM_FONTBOX, L"Choose Font");
         }
     }
 
@@ -333,13 +320,13 @@ BOOL CFilesPPDlg::OnInitDialog()
     SetIcon(m_hIcon, TRUE);			// Set big icon
     SetIcon(m_hIcon, FALSE);		// Set small icon
 
-    m_contentCtl.SendMessage(LVM_SETEXTENDEDLISTVIEWSTYLE, 0, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+    m_contentCtl.SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | m_contentCtl.GetExtendedStyle()); 
+    //m_contentCtl.SendMessage(LVM_SETEXTENDEDLISTVIEWSTYLE, 0, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
     m_contentCtl.EnableMarkSortedColumn();
     m_contentCtl.EnableMultipleSort(true);
     m_contentCtl.InsertColumn(0, _T("Name"), LVCFMT_LEFT, 200, 0);
     m_contentCtl.InsertColumn(1, _T("Size"), LVCFMT_RIGHT, 100, 1);
     m_contentCtl.InsertColumn(2, _T(""), LVCFMT_RIGHT, 10, 2);  // nothing shown for this one - makes autosizing work better
-    m_contentCtl.SetExtendedStyle(LVS_EX_INFOTIP |  m_contentCtl.GetExtendedStyle());
 
     if (auto statBarPlaceholder = GetDlgItem(IDC_STATUSBARPLACEHOLDER))
     {
@@ -364,8 +351,6 @@ BOOL CFilesPPDlg::OnInitDialog()
 
     m_spinCtrl.SetRange(0, 2);
     m_spinCtrl.SetPos(1);
-
-
     return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -522,6 +507,21 @@ void CFilesPPDlg::OnSysCommand(UINT nID, LPARAM lParam)
     {
         CAboutDlg dlgAbout;
         dlgAbout.DoModal();
+    }
+    if ((nID & 0xFFF0) == IDM_FONTBOX)
+    {
+        CFontDialog dlg;
+        if (dlg.DoModal() == IDOK)
+        {
+            // Create the font using the selected font from CFontDialog.
+            LOGFONT lf;
+            memcpy(&lf, dlg.m_cf.lpLogFont, sizeof(LOGFONT));
+
+            auto font = new CFont;
+            VERIFY(font->CreateFontIndirect(&lf));
+
+            m_contentCtl.SetFont(font, TRUE);
+        }
     }
     else
     {
@@ -775,6 +775,36 @@ void Filter::ApplyStatus()
     userFeedback.SetUserFeedback(ostringstream() << "Folders: " << folders << " Files: " << files << "  Size: " << size);
 }
 
+BOOL ItemListCtrl::OnTTNNeedText( UINT id, NMHDR * pNMHDR, LRESULT * pResult )
+{
+    TOOLTIPTEXTW* pTTTW = (TOOLTIPTEXTW*)pNMHDR;
+    *pResult = 0;
+
+    LVHITTESTINFO lvhitTestInfo;
+    lvhitTestInfo.pt = GetCurrentMessage()->pt;
+    ScreenToClient( &lvhitTestInfo.pt );
+
+    int nItem = SubItemHitTest(&lvhitTestInfo);
+    int nSubItem = lvhitTestInfo.iSubItem;
+
+    if (lvhitTestInfo.flags & LVHT_ONITEM)
+    {
+        if (nItem < dlg.filteredItems.size() && 
+            nSubItem < dlg.activeReader->columnDefs.size()) 
+        {
+            if (auto& f = dlg.activeReader->columnDefs[nSubItem].valueFunc)
+            {
+                static std::wstring tooltipText;
+                //wcsncpy_s(pItem->pszText, pItem->cchTextMax, str, min(str.GetLength(), pItem->cchTextMax-1));
+                tooltipText.assign(CA2CT(f(dlg.filteredItems[nItem]).c_str()));
+                for (auto i = tooltipText.size(); i--; ) if (tooltipText[i] == '\n') tooltipText.replace(i, 1, L"\r\n");
+                ::SendMessage(pTTTW->hdr.hwndFrom, TTM_SETMAXTIPWIDTH, 0, 1000);
+                pTTTW->lpszText = (LPWSTR)tooltipText.c_str();
+            }
+        }
+    }
+    return FALSE;
+}
 
 void CFilesPPDlg::OnLvnGetdispinfoList2(NMHDR* pNMHDR, LRESULT* pResult)
 {
@@ -788,34 +818,45 @@ void CFilesPPDlg::OnLvnGetdispinfoList2(NMHDR* pNMHDR, LRESULT* pResult)
     {
         if (auto& f = activeReader->columnDefs[pItem->iSubItem].valueFunc)
         {
-            CString str(CA2CT(f(filteredItems[iItem]).c_str()));
+            CString str(CA2WEX(f(filteredItems[iItem]).c_str(), CP_UTF8));
             wcsncpy_s(pItem->pszText, pItem->cchTextMax, str, min(str.GetLength(), pItem->cchTextMax-1));
         }
     }
     *pResult = 0;
 }
 
-//INT_PTR ItemListCtrl::OnToolHitTest(CPoint point, TOOLINFO* pTI) const 
-//{
-//   // CPoint pt(GetMessagePos());
-//    ScreenToClient(&point);
-//
-//    int nRow, nCol;
-//    CellHitTest(point, nRow, nCol);
-//
-//    //Get the client (area occupied by this control)
+INT_PTR ItemListCtrl::OnToolHitTest(CPoint point, TOOLINFO* pTI) const 
+{
+   // CPoint pt(GetMessagePos());
+    //ScreenToClient(&point);
+
+    LVHITTESTINFO lvhitTestInfo;
+    lvhitTestInfo.pt = point;
+    int nItem = const_cast<ItemListCtrl*>(this)->SubItemHitTest(&lvhitTestInfo);
+    int nSubItem = lvhitTestInfo.iSubItem;
+
+    if (!(lvhitTestInfo.flags & LVHT_ONITEM)) return -1;
+
+    //Fill in the TOOLINFO structure
+    pTI->uFlags |= TTF_ALWAYSTIP;
+    pTI->hwnd = m_hWnd;
+    pTI->uId = (UINT) (nItem * 100 + nSubItem);
+    pTI->lpszText = LPSTR_TEXTCALLBACK;
+    GetClientRect(&pTI->rect);
+//    pTI->rect = rcClient;
+
 //    RECT rcClient;
 //    GetClientRect( &rcClient );
-//
-//    //Fill in the TOOLINFO structure
-//    pTI->hwnd = m_hWnd;
-//    pTI->uId = (UINT) (nRow * 1000 + nCol);
-//    // Send TTN_NEEDTEXT when tooltip should be shown
-//    pTI->lpszText = LPSTR_TEXTCALLBACK;
-//    pTI->rect = rcClient;
-//
-//    return pTI->uId;
-//}
+
+    ////Fill in the TOOLINFO structure
+    //pTI->hwnd = m_hWnd;
+    //pTI->uId = (UINT) (nRow * 1000 + nCol);
+    //// Send TTN_NEEDTEXT when tooltip should be shown
+    //pTI->lpszText = LPSTR_TEXTCALLBACK;
+    //pTI->rect = rcClient;
+
+    return pTI->uId;
+}
 
 
 void CFilesPPDlg::OnDropFiles(HDROP hDropInfo)
