@@ -28,6 +28,7 @@ if (WIN32)
             windows/LocalFSReader.cpp windows/LocalFSReader.h
             windows/stdafx.cpp windows/stdafx.h
             windows/targetver.h
+            windows/TextDialog.cpp windows/TextDialog.h
             windows/UserPassDialog.cpp windows/UserPassDialog.h
             windows/PlatformSupplied.cpp
     )

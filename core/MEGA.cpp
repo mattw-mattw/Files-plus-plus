@@ -33,7 +33,7 @@ MEGA::MEGA()
                     mcsp->init(nullptr);
 
                     megaAccounts.push_back(make_shared<Account>(d->path(), masp, mcsp));
-                    masp->fastLogin(sid.c_str(), false, new OneTimeListener([this, account = megaAccounts.back()](m::MegaRequest* request, m::MegaError* e) { onLogin(e, account); }));
+                    masp->fastLogin(sid.c_str(), new OneTimeListener([this, account = megaAccounts.back()](m::MegaRequest* request, m::MegaError* e) { onLogin(e, account); }));
                 }
                 else if (!link.empty() && LocalUserCrypt(link, false))
                 {
