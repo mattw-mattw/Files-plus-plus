@@ -27,7 +27,7 @@ enum Action {
 
 struct ItemQueue
 {
-	typedef std::vector<std::unique_ptr<Item>> Batch;
+	typedef std::deque<std::unique_ptr<Item>> Batch;
 	struct Entry { Action action; Batch batch; };
 	NotifyQueue<Entry> q;
 

@@ -200,12 +200,26 @@ bool MetaPath::GetDragDropUNCPath(Item* pItem, std::string& uncPath)
     {
     case LocalFS:   uncPath = PlatformLocalUNCPrefix() + (localPath / pItem->u8Name).u8string();
                     return true;
+
     case MegaFS:    if (auto p = dynamic_cast<ItemMegaNode*>(pItem)) 
                         if (auto ap = wap.lock())
                         {   
                             uncPath = PlatformMegaUNCPrefix(ap->masp.get()) + ap->masp->getNodePath(p->mnode.get());
                             return true;
                         }
+                    break;
+
+    case Playlist:  if (auto p = dynamic_cast<ItemMegaNode*>(pItem)) 
+                    {    
+                        OwningAccountPtr ap;
+                        if (auto n = g_mega->findNode(p->mnode->getHandle(), &ap))
+                        {
+                            uncPath = PlatformMegaUNCPrefix(ap->masp.get()) + ap->masp->getNodePath(n.get());
+                            return true;
+                        }
+                    }
+                    break;
+
     default:        break;
     }
     return false;

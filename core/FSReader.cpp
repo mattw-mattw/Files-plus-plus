@@ -859,7 +859,7 @@ void PlaylistReader::Threaded()
                         h = json.gethandle();
                         break;
                     case EOO:
-                        if (auto p = g_mega->findNode(h))
+                        if (auto p = g_mega->findNode(h, nullptr))
                         {
                             itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(string(p->getName()), std::move(p)));
                         }

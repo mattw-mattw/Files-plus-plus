@@ -162,7 +162,7 @@ struct MEGA
     void loadFavourites(OwningAccountPtr macc);
     void saveFavourites(OwningAccountPtr macc);
 
-    std::unique_ptr<m::MegaNode> findNode(m::MegaHandle h);
+    std::unique_ptr<m::MegaNode> findNode(m::MegaHandle h, OwningAccountPtr* oap);
 
 
     static std::string ToBase64(const std::string& s);

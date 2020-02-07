@@ -81,18 +81,23 @@ MEGA::~MEGA()
 
 }
 
-std::unique_ptr<m::MegaNode> MEGA::findNode(m::MegaHandle h)
+std::unique_ptr<m::MegaNode> MEGA::findNode(m::MegaHandle h, OwningAccountPtr* oap)
 {
     std::lock_guard g(m);
     for (auto& a : megaAccounts) 
     { 
-        auto p = a->masp->getNodeByHandle(h);
-        if (p) return std::unique_ptr<m::MegaNode>(p);
+        if (auto p = a->masp->getNodeByHandle(h))
+        {
+            if (oap) *oap = a;
+            return std::unique_ptr<m::MegaNode>(p);
+        }
     }
     for (auto& a : megaFolderLinks) 
     { 
-        auto p = a->masp->getNodeByHandle(h);
-        if (p) return std::unique_ptr<m::MegaNode>(p);
+        if (auto p = a->masp->getNodeByHandle(h))
+        {
+            return std::unique_ptr<m::MegaNode>(p);
+        }
     }
     return nullptr;
 }
