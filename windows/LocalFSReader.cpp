@@ -49,9 +49,10 @@ void LocalVolumeReader::Threaded()
     itemQueue->Send();
 }
 
-LocalFSReader::LocalFSReader(fs::path p, QueueTrigger t, bool r, UserFeedback& uf)
+LocalFSReader::LocalFSReader(fs::path p, bool normalizeSep, QueueTrigger t, bool r, UserFeedback& uf)
     : FSReader(t, r, uf)
     , dir(p)
+    , normalizeSeparator(normalizeSep)
 {
     memset(&overlapped, 0, sizeof(overlapped));
     workerthread = std::thread([this]() { Threaded(); });
@@ -120,14 +121,16 @@ bool LocalFSReader::ReadDir(const fs::path& p, bool recurse, const fs::path& rec
         for (fs::directory_iterator i(p); i != fs::directory_iterator(); ++i)
         {
             fs::path relativename = recurseprefix / i->path().filename();
+            auto str = relativename.u8string();
+            if (normalizeSeparator) std::replace(str.begin(), str.end(), '\\', '/');
             if (i->is_directory())
             {
-                itemQueue->Queue(NEWITEM, make_unique<ItemLocalFS>(relativename.u8string(), -1, true));
+                itemQueue->Queue(NEWITEM, make_unique<ItemLocalFS>(move(str), -1, true));
                 if (recurse && !ReadDir(i->path(), true, relativename)) return false;
             }
             else if (i->is_regular_file())
             {
-                itemQueue->Queue(NEWITEM, make_unique<ItemLocalFS>(relativename.u8string(), i->file_size(), false));
+                itemQueue->Queue(NEWITEM, make_unique<ItemLocalFS>(move(str), i->file_size(), false));
             }
         }
         return true;

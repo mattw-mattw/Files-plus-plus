@@ -72,12 +72,14 @@ struct MetaPath_LocalFS : MetaPath
 	std::unique_ptr<MetaPath> clone() const override { return std::make_unique<MetaPath_LocalFS>(localPath); }
 	std::unique_ptr<MetaPath> Ascend() override;
 	std::unique_ptr<MetaPath> Descend(const Item&) override;
-	std::unique_ptr<FSReader> GetContentReader(QueueTrigger t, bool recurse, UserFeedback& uf) const override { return NewLocalFSReader(localPath, t, recurse, uf); }
+	std::unique_ptr<FSReader> GetContentReader(QueueTrigger t, bool recurse, UserFeedback& uf) const override { return NewLocalFSReader(localPath, normalizeSeparator, t, recurse, uf); }
 	std::string u8DisplayPath() const override { return localPath.u8string(); }
 	std::string serialize() override { return  "LocalFS/" + ToBase64(localPath.u8string()); }
 
 	std::string GetFullPath(Item&) override;
 	bool GetDragDropUNCPath(Item*, std::string& uncPath) override;
+
+	bool normalizeSeparator = false;
 
 private:
 	std::filesystem::path localPath;
@@ -197,6 +199,31 @@ struct MetaPath_CommandHistory : MetaPath
 private:
 	WeakAccountPtr wap;
 };
+
+
+struct MetaPath_CompareView : MetaPath
+{
+	MetaPath_CompareView(std::unique_ptr<MetaPath> v1, std::unique_ptr<MetaPath> v2, bool diffonly) : view1(move(v1)), view2(move(v2)), differentOnly(diffonly) {}
+
+	bool operator==(const MetaPath& o) const override { auto mp = dynamic_cast<const MetaPath_CompareView*>(&o); return mp && *mp->view1 == *view1 && *mp->view2 == *view2; }
+	std::unique_ptr<MetaPath> clone() const override { return std::make_unique<MetaPath_CompareView>(view1->clone(), view2->clone(), differentOnly); }
+	std::unique_ptr<MetaPath> Ascend() override { return nullptr; }
+	std::unique_ptr<MetaPath> Descend(const Item&) override { return nullptr; }
+	std::string u8DisplayPath() const override { return view1->u8DisplayPath() + " vs " + view2->u8DisplayPath() + (differentOnly ? " (different only)": ""); }
+	std::string serialize() override { return ""; }
+
+	std::unique_ptr<FSReader> GetContentReader(QueueTrigger t, bool recurse, UserFeedback& uf) const override 
+	{ 
+		return std::make_unique<CompareViewReader>(*view1, *view2, differentOnly, t, recurse, uf); 
+	}
+
+private:
+	std::unique_ptr<MetaPath> view1;
+	std::unique_ptr<MetaPath> view2;
+	bool differentOnly;
+};
+
+
 
 
 class Favourites

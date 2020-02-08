@@ -879,3 +879,86 @@ void PlaylistReader::Threaded()
     itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
     itemQueue->Send();
 }
+
+
+CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differentonly, QueueTrigger t, bool r, UserFeedback& uf) 
+    : FSReader(t, r, uf)
+    , reader1(mp1.GetContentReader(compare_trigger, r, uf))
+    , reader2(mp2.GetContentReader(compare_trigger, r, uf))
+    , differentOnly(differentonly)
+    , workerthread([this]() { Threaded(); })
+{
+    columnDefs.push_back(ColumnDef{"Name1", 200, [](const Item* i){ auto& ii = static_cast<const ItemCompareItem*>(i)->item1; return ii->u8Name + (ii->isFolder() ? "/" : ""); }});
+    columnDefs.push_back(ColumnDef{"Name2", 200, [](const Item* i){ auto& ii = static_cast<const ItemCompareItem*>(i)->item2; return ii->u8Name + (ii->isFolder() ? "/" : ""); }});
+    columnDefs.push_back(ColumnDef{"Size1", 50, [](const Item* i){ auto& ii = static_cast<const ItemCompareItem*>(i)->item1; return ii->size() < 0 ? "" : to_string(ii->size()); }});
+    columnDefs.push_back(ColumnDef{"Size2", 50, [](const Item* i){ auto& ii = static_cast<const ItemCompareItem*>(i)->item2; return ii->size() < 0 ? "" : to_string(ii->size()); }});
+}
+
+CompareViewReader::~CompareViewReader()
+{
+    cancelling = true;
+    workerthread.join();
+}
+
+void CompareViewReader::Threaded()
+{
+    bool reader1finished = false;
+    bool reader2finished = false;
+
+    std::deque<std::unique_ptr<Item>> data1;
+    std::deque<std::unique_ptr<Item>> data2;
+
+    while (!reader1finished || !reader2finished)
+    {
+        ItemQueue::Entry entry1;
+        while (reader1->itemQueue->q.pop(entry1, false))
+        {
+            if (entry1.action == Action::NEWITEM) for (auto& e : entry1.batch) data1.push_back(move(e));
+            if (entry1.action == Action::FILE_ACTION_APP_READCOMPLETE) reader1finished = true;
+        }
+
+        ItemQueue::Entry entry2;
+        while (reader2->itemQueue->q.pop(entry2, false))
+        {
+            if (entry2.action == Action::NEWITEM) for (auto& e : entry2.batch) data2.push_back(move(e));
+            if (entry2.action == Action::FILE_ACTION_APP_READCOMPLETE) reader2finished = true;
+        }
+
+        WaitMillisec(10);
+    }
+
+    auto cmp = [](const std::unique_ptr<Item>& a, const std::unique_ptr<Item>& b){ return a->u8Name < b->u8Name; };
+
+    std::sort(data1.begin(), data1.end(), cmp);
+    std::sort(data2.begin(), data2.end(), cmp);
+
+    auto iter1 = data1.begin();
+    auto iter2 = data2.begin();
+    for (;;)
+    {
+        bool end1 = iter1 == data1.end();
+        bool end2 = iter2 == data2.end();
+        if (end1 && end2)
+        {
+            break;
+        }
+        else if (end2 || (!end1 && cmp(*iter1, *iter2)))
+        {
+            itemQueue->Queue(NEWITEM, std::make_unique<ItemCompareItem>(move(*iter1), std::make_unique<ItemNullItem>()));
+            ++iter1;
+        }
+        else if (end1 || (!end2 && cmp(*iter2, *iter1)))
+        {
+            itemQueue->Queue(NEWITEM, std::make_unique<ItemCompareItem>(std::make_unique<ItemNullItem>(), move(*iter2)));
+            ++iter2;
+        }
+        else
+        {
+            if (!differentOnly || (*iter1)->size() != (*iter2)->size()) 
+                itemQueue->Queue(NEWITEM, std::make_unique<ItemCompareItem>(move(*iter1), move(*iter2)));
+            ++iter1, ++iter2;
+        }
+    }
+    itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
+    itemQueue->Send();
+}

@@ -133,3 +133,23 @@ struct ItemCommand : public Item
     ItemCommand(std::shared_ptr<MRequest> r);
     std::shared_ptr<MRequest> mrequest;
 };
+
+
+struct ItemCompareItem : public Item
+{
+	std::unique_ptr<Item> item1, item2;
+	ItemCompareItem(std::unique_ptr<Item> i1, std::unique_ptr<Item> i2) : item1(move(i1)), item2(move(i2)), Item(i1->u8Name + " vs " + i2->u8Name) {}
+	bool isFolder() const override { return item1->isFolder() || item2->isFolder(); }
+	bool isMegaPath() const{ return false; }
+	int64_t size() const override { return item1->size() + item2->size(); }
+};
+
+struct ItemNullItem : public Item
+{
+	ItemNullItem() : Item("") {}
+	bool isFolder() const override { return false; }
+	bool isMegaPath() const{ return false; }
+	int64_t size() const override { return -1; }
+};
+
+

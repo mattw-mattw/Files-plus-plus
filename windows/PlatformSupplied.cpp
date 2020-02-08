@@ -100,9 +100,9 @@ void AddMEGAFolderLink()
 }
 
 
-unique_ptr<FSReader> NewLocalFSReader(const fs::path& localPath, QueueTrigger t, bool recurse, UserFeedback& uf)
+unique_ptr<FSReader> NewLocalFSReader(const fs::path& localPath, bool normalizeSeparator, QueueTrigger t, bool recurse, UserFeedback& uf)
 {
-	return make_unique<LocalFSReader>(localPath, t, recurse, uf);
+	return make_unique<LocalFSReader>(localPath, normalizeSeparator, t, recurse, uf);
 }
 
 bool LocalUserCrypt(string& data, bool encrypt)

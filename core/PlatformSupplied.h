@@ -17,7 +17,7 @@ void AddMEGAAccount();
 void AddMEGAFolderLink();
 void RemoveMEGAAccount(ApiPtr);
 
-std::unique_ptr<FSReader> NewLocalFSReader(const fs::path& p, QueueTrigger t, bool recurse, UserFeedback& uf);
+std::unique_ptr<FSReader> NewLocalFSReader(const fs::path& p, bool normalizeSeparator, QueueTrigger t, bool recurse, UserFeedback& uf);
 
 bool LocalUserCrypt(std::string& data, bool encrypt);
 

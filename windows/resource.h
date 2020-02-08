@@ -7,6 +7,8 @@
 #define IDAPPLY                         4
 #define IDM_ABOUTBOX                    0x0010
 #define IDM_FONTBOX                     0x0020
+#define IDM_COMPARE_TO_FAVE             0x0030
+#define IDM_COMPARE_TO_FAVE_DIFFONLY    0x0040
 #define IDD_ABOUTBOX                    100
 #define IDP_OLE_INIT_FAILED             100
 #define IDS_ABOUTBOX                    101

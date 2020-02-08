@@ -6,6 +6,8 @@
 #include "basictypes.h"
 #include "Item.h"
 
+struct MetaPath;
+
 struct UserFeedback
 {
     void SetUserFeedback(const std::ostringstream& s);
@@ -244,4 +246,23 @@ private:
     bool cancelling = false;
     std::thread workerthread;
 };
+
+
+struct CompareViewReader : FSReader
+{
+	QueueTrigger compare_trigger = []() {  };
+
+	CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differentOnly, QueueTrigger t, bool r, UserFeedback& uf);
+	~CompareViewReader();
+
+private:
+	void Threaded();
+
+	std::unique_ptr<FSReader> reader1, reader2;
+	bool differentOnly;
+	bool cancelling = false;
+	std::thread workerthread;
+};
+
+
 

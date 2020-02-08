@@ -312,6 +312,8 @@ BOOL CFilesPPDlg::OnInitDialog()
             pSysMenu->AppendMenu(MF_SEPARATOR);
             pSysMenu->AppendMenu(MF_STRING, IDM_ABOUTBOX, strAboutMenu);
             pSysMenu->AppendMenu(MF_STRING, IDM_FONTBOX, L"Choose Font");
+            pSysMenu->AppendMenu(MF_STRING, IDM_COMPARE_TO_FAVE, L"Compare To Favourite");
+            pSysMenu->AppendMenu(MF_STRING, IDM_COMPARE_TO_FAVE_DIFFONLY, L"Compare To Favourite (Different only)");
         }
     }
 
@@ -522,6 +524,44 @@ void CFilesPPDlg::OnSysCommand(UINT nID, LPARAM lParam)
 
             m_contentCtl.SetFont(font, TRUE);
         }
+    }
+    if ((nID & 0xFFF0) == IDM_COMPARE_TO_FAVE || (nID & 0xFFF0) == IDM_COMPARE_TO_FAVE_DIFFONLY)
+    {
+        bool differentOnly = (nID & 0xFFF0) == IDM_COMPARE_TO_FAVE_DIFFONLY;
+        CMenu m;
+        m.CreatePopupMenu();
+        MenuActions ma;
+        ma.actions.push_back(MenuActions::MenuItem{ string("*** Compare To ***") , nullptr, true });
+        auto favourites = g_mega->favourites.copy();
+        OwningAccountPtr currAcc = nullptr;
+        for (unsigned i = 0; i < favourites.size(); ++i)
+        {
+            auto test = favourites[i]->Account();
+            if (test != currAcc)
+            {
+                currAcc = test;
+                ma.actions.push_back(MenuActions::MenuItem{ currAcc ? OwnString(currAcc->masp->getMyEmail()) : string("<Local>") , nullptr, true });
+            }
+            ma.actions.push_back(MenuActions::MenuItem{ favourites[i]->u8DisplayPath(), [thisfavourite = std::shared_ptr<MetaPath>(favourites[i]->clone()), differentOnly, this]()
+            {
+                // make a new top level window (complete with its own gui thread) to load subdir 
+                auto t = make_unique<CFilesPPDlgThread>();
+                auto view1 = m_pathCtl.metaPath->clone();
+                auto view2 = thisfavourite->clone();
+                auto dc1 = dynamic_cast<MetaPath_LocalFS*>(view1.get());
+                auto dc2 = dynamic_cast<MetaPath_LocalFS*>(view2.get());
+                if (dc1 && !dc2) dc1->normalizeSeparator = true;
+                if (dc2 && !dc1) dc2->normalizeSeparator = true;
+                t->dlg.m_pathCtl.metaPath = std::make_unique<MetaPath_CompareView>(move(view1), move(view2), differentOnly);
+                t->m_bAutoDelete = true;
+                GetWindowRect(t->dlg.originatorWindowRect);
+                if (!t->CreateThread()) AfxMessageBox(_T("Thread creation failed"));
+                else t.release();
+            } });
+        }
+        CRect r;
+        m_spinCtrl.GetWindowRect(r);
+        ExecMenu(m, ma, 100, POINT{ r.left, r.bottom }, this);
     }
     else
     {

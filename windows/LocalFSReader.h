@@ -14,11 +14,12 @@ class LocalFSReader : public FSReader
 	std::string overlappedbuf;
 	bool cancelling = false;
     HWND hwnd= 0;
+	bool normalizeSeparator;
 
 public:
 	std::filesystem::path dir;
 
-	LocalFSReader(std::filesystem::path p, QueueTrigger, bool r, UserFeedback& uf);
+	LocalFSReader(std::filesystem::path p, bool normalizeSep, QueueTrigger, bool r, UserFeedback& uf);
 	~LocalFSReader();
 
 	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;

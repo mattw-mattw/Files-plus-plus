@@ -132,11 +132,13 @@ UINT_PTR ExecMenu(CMenu& contextMenu, MenuActions& ma, UINT_PTR baseID, POINT xy
     size_t baseIndex = UINT_MAX;
     if (!ma.actions.empty())
     {
-        contextMenu.AppendMenu(MF_SEPARATOR);
+        //contextMenu.AppendMenu(MF_SEPARATOR);
 
         UINT_PTR id = baseID;
         for (auto& entry : ma.actions)
         {
+			if (baseIndex == UINT_MAX) baseIndex = id;
+
             if (entry.isTitle)
             {
                 contextMenu.AppendMenu(MF_SEPARATOR, UINT_MAX, (LPCTSTR)nullptr);
@@ -145,7 +147,6 @@ UINT_PTR ExecMenu(CMenu& contextMenu, MenuActions& ma, UINT_PTR baseID, POINT xy
             }
             else
             {
-                if (baseIndex == UINT_MAX) baseIndex = id;
                 contextMenu.AppendMenu(MF_STRING, id++, CA2CT(entry.text.c_str()));
             }
         }
