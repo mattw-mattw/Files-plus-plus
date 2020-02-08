@@ -86,7 +86,7 @@ void TopShelfReader::Threaded()
             itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaAccount>(p->folderLink, p));
         }
         itemQueue->Queue(FILE_ACTION_APP_READCOMPLETE, NULL);
-        itemQueue->Queue(NEWITEM, std::make_unique<Item>("<MEGA Command History>"));
+        //itemQueue->Queue(NEWITEM, std::make_unique<Item>("<MEGA Command History>"));
         itemQueue->Send();
 
         unique_lock<mutex> g(g_mega->updateCVMutex);

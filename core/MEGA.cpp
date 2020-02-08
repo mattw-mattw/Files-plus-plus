@@ -111,14 +111,14 @@ void MEGA::loadFavourites(OwningAccountPtr macc)
         while (!s.empty() && isspace(s.back())) s.pop_back();
         if (s.empty()) continue;
         auto mp = MetaPath::deserialize(s);
-        if (mp) favourites.Toggle(mp);
+        if (mp) favourites.Toggle(*mp);
     }
-}
+}                                                                                               
 
 void MEGA::saveFavourites(OwningAccountPtr macc)
 {
     ofstream faves((macc ? macc->cacheFolder : BasePath()) / "favourites");
-    for (auto& f : favourites.copy()) { string s; if (f.Account() == macc && f.serialize(s)) faves << s << std::endl; }
+    for (auto& f : favourites.copy()) { if (f->Account() == macc) { auto s = f->serialize(); if (!s.empty()) faves << s << std::endl; } }
 }
 
 auto MEGA::findMegaApi(uint64_t dragdroptoken) -> OwningApiPtr
@@ -305,6 +305,27 @@ std::string MEGA::FromBase64(const std::string& s)
     delete[] binary;
     return ret;
 }
+
+std::string ToBase64(const std::string& s) 
+{ 
+    return MEGA::ToBase64(s);
+}
+
+std::string FromBase64(const std::string& s)
+{
+    return MEGA::FromBase64(s);
+}
+
+std::string ToBase64_H8(m::MegaHandle h) 
+{ 
+    return OwnString(m::MegaApi::userHandleToBase64(h));
+}
+
+m::MegaHandle FromBase64_H8(const std::string& s)
+{
+    return m::MegaApi::base64ToUserHandle(s.c_str());
+}
+
 
 MRequest::MRequest(const OwningApiPtr& masp, const std::string& a)
     : OneTimeListener(nullptr)

@@ -88,7 +88,7 @@ struct ItemMegaAccount : public Item
 struct ItemMegaNode : public Item
 {
 	ItemMegaNode(std::string name, std::unique_ptr<m::MegaNode> n) : Item(move(name)), mnode(std::move(n)) {}
-	std::unique_ptr<m::MegaNode> mnode;
+	copy_ptr<m::MegaNode> mnode;
 	bool isFolder() const override { return mnode->isFolder(); }
 	int64_t size() const override { return isFolder() ? -1 : mnode->getSize(); }
 };
@@ -103,7 +103,7 @@ struct ItemMegaChatRoot : public Item
 struct ItemMegaChat : public Item
 {
 	ItemMegaChat(std::string name, std::unique_ptr<c::MegaChatRoom>&& p) : Item(move(name)), room(move(p)) {}
-	std::unique_ptr<c::MegaChatRoom> room;
+	copy_ptr<c::MegaChatRoom> room;
 	bool isFolder() const override { return false; }
 };
 
@@ -124,7 +124,7 @@ struct ItemMegaInshare : public Item
 	}
 
 	ItemMegaInshare(std::unique_ptr<m::MegaNode> n, m::MegaApi& api, int64_t size, bool folder) : Item(insharepath(*n, api)), mnode(std::move(n)) {}
-	std::unique_ptr<m::MegaNode> mnode;
+	copy_ptr<m::MegaNode> mnode;
 };
 
 

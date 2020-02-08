@@ -31,6 +31,7 @@ struct copy_ptr : public std::unique_ptr<T>
 {
 	copy_ptr() {}
 	explicit copy_ptr(T*) : unique_ptr(p) {}
+	explicit copy_ptr(unique_ptr<T>&& up) : unique_ptr(move(up)) {}
 	explicit copy_ptr(const copy_ptr& p) : unique_ptr(p ? p->copy() : nullptr) {}
 	explicit copy_ptr(copy_ptr&& p) noexcept : unique_ptr(p.release()) {}
 	void operator=(const copy_ptr& p) { reset(p ? p->copy() : nullptr); }
@@ -75,3 +76,9 @@ struct OwnString : public std::string
 {
     explicit OwnString(const char* s) : std::string(s ? s : "") { delete[] s; }
 };
+
+std::string ToBase64(const std::string& s);
+std::string FromBase64(const std::string& s);
+std::string ToBase64_H8(m::MegaHandle h);
+m::MegaHandle FromBase64_H8(const std::string& s);
+

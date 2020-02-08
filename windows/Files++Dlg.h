@@ -67,10 +67,10 @@ class PathCtrl : public CEdit
 
 	std::vector<ApiPtr> megaAccounts;
 
-	std::deque<MetaPath> historyBack, historyForward;
+	std::deque<std::unique_ptr<MetaPath>> historyBack, historyForward;
 
 public:
-	MetaPath metaPath;
+	std::unique_ptr<MetaPath> metaPath;
 
 	PathCtrl();
 	void SetWindowText();
@@ -82,16 +82,16 @@ public:
 };
 
 template<class T1, class T2>
-void match_removeintersection(T1& a, T2& b, std::function<bool(typename T1::value_type&, typename T2::value_type&)> cmpless)
+void match_removeintersection(T1& a, T2& b, std::function<bool(typename const T1::value_type&, typename const T2::value_type&)> cmpless)
 {
 	if (a.empty() || b.empty()) return;
 	sort(a.begin(), a.end(), cmpless);
 	sort(b.begin(), b.end(), cmpless);
 
-	T1::iterator ra = std::lower_bound(a.begin(), a.end(), *b.begin()), wa = ra;
-	T2::iterator rb = std::lower_bound(b.begin(), b.end(), *a.begin());
-	T1::iterator final_a = upper_bound(a.begin(), a.end(), *(b.end()-1));
-	T2::iterator final_b = lower_bound(b.begin(), b.end(), *(a.end()-1));
+	T1::iterator ra = std::lower_bound(a.begin(), a.end(), *b.begin(), cmpless), wa = ra;
+	T2::iterator rb = std::lower_bound(b.begin(), b.end(), *a.begin(), cmpless);
+	T1::iterator final_a = upper_bound(a.begin(), a.end(), *(b.end()-1), cmpless);
+	T2::iterator final_b = upper_bound(b.begin(), b.end(), *(a.end()-1), cmpless);
 	bool writinga = false;
 	while (ra != final_a && ra != a.end() && rb != final_b && rb != b.end())
 	{
@@ -149,7 +149,7 @@ public:
 		for (auto& i : additionalItems) f(i);
 	}
 
-	void removeintersection(std::vector<T>& b, bool stable)
+	void removeintersection(std::deque<T>& b, bool stable)
 	{
 		std::sort(b.begin(), b.end(), cmpless);
 		match_removeintersection(sortedItems, b, cmpless);

@@ -249,33 +249,33 @@ void PathCtrl::OnDropFiles(HDROP hDropInfo)
 
 PathCtrl::PathCtrl()
 {
-    metaPath.SetLocalPath(StartPath());
+    metaPath.reset(new MetaPath_LocalFS(StartPath()));
 }
 
 void PathCtrl::SetWindowText()
 {
-    ::SetWindowTextA(m_hWnd, metaPath.u8DisplayPath().c_str());
+    ::SetWindowTextA(m_hWnd, metaPath->u8DisplayPath().c_str());
 }
 
 void PathCtrl::AcceptEdits()
 {
     CString csPath;
     GetWindowText(csPath);
-    metaPath.SetLocalPath(fs::u8path(string(CT2CA(csPath))));
+    metaPath.reset(new MetaPath_LocalFS(fs::u8path(string(CT2CA(csPath)))));  // todo: recognise other path types
 }
 
 void PathCtrl::PrepareNavigateBack()
 {
-    if (!historyBack.empty() && historyBack.back() == metaPath) return;
-    historyBack.push_back(metaPath);
+    if (!historyBack.empty() && *historyBack.back() == *metaPath) return;
+    historyBack.push_back(metaPath->clone());
     historyForward.clear();
 }
 
 bool PathCtrl::NavigateBack()
 {
     if (historyBack.empty()) return false;
-    historyForward.push_back(metaPath);
-    metaPath = historyBack.back();
+    historyForward.push_back(metaPath->clone());
+    metaPath = move(historyBack.back());
     historyBack.pop_back();
     return true;
 }
@@ -283,8 +283,8 @@ bool PathCtrl::NavigateBack()
 bool PathCtrl::NavigateForward()
 {
     if (historyForward.empty()) return false;
-    historyBack.push_back(metaPath);
-    metaPath = historyForward.back();
+    historyBack.push_back(metaPath->clone());
+    metaPath = move(historyForward.back());
     historyForward.pop_back();
     return true;
 }
@@ -357,7 +357,7 @@ BOOL CFilesPPDlg::OnInitDialog()
 void CFilesPPDlg::LoadContent(bool resetFilter)
 {
     string title = "Files++";
-    if (auto acc = m_pathCtl.metaPath.Account())
+    if (auto acc = m_pathCtl.metaPath->Account())
     {
         OwnString email(acc->masp->getMyEmail());
         if (!email.empty()) title = email;
@@ -378,7 +378,7 @@ void CFilesPPDlg::LoadContent(bool resetFilter)
 
     QueueTrigger t = [wnd = m_hWnd]() { ::PostMessage(wnd, WM_APP_CONTENTUPDATE, (WPARAM)0, (LPARAM)0); };
 
-    activeReader = m_pathCtl.metaPath.GetContentReader(t, filterSettings.recursesubfolders, *this);
+    activeReader = m_pathCtl.metaPath->GetContentReader(t, filterSettings.recursesubfolders, *this);
 
     while (m_contentCtl.GetHeaderCtrl().GetItemCount() > 0) m_contentCtl.DeleteColumn(0);
 
@@ -431,13 +431,13 @@ LRESULT CFilesPPDlg::OnContentUpdate(WPARAM wParam, LPARAM lParam)
 
         case DELETEDITEM:
         case RENAMEDFROM:
-            items.removeintersection(entry.batch, false);
             {
-                std::vector<Item*> batch;
-                batch.reserve(entry.batch.size());
+                std::deque<Item*> batch;
+                //batch.reserve(entry.batch.size());
                 for (auto& i : entry.batch) batch.push_back(i.get());
                 filteredItems.removeintersection(batch, true);
             }
+            items.removeintersection(entry.batch, false);
             //remove_if_absent(m_contentCtl.filteredItems, entry.batch);
             m_contentCtl.SetItemCount(int(filteredItems.size()));
             break;
@@ -463,7 +463,7 @@ LRESULT CFilesPPDlg::OnContentUpdate(WPARAM wParam, LPARAM lParam)
         case FOLDER_RESOLVED_SOFTLINK:
             if (auto p = dynamic_cast<LocalFSReader*>(activeReader.get()))
             {
-                m_pathCtl.metaPath.SetLocalPath(p->dir);
+                m_pathCtl.metaPath.reset(new MetaPath_LocalFS(p->dir));
                 m_pathCtl.SetWindowText();
             }
             break;
@@ -606,11 +606,10 @@ BOOL CFilesPPDlg::CanExit()
 
 void CFilesPPDlg::OnBnClickedButton1()
 {
-    auto tmp = m_pathCtl.metaPath;
-    if (tmp.Ascend())
+    if (auto tmp = m_pathCtl.metaPath->Ascend())
     {
         m_pathCtl.PrepareNavigateBack();
-        m_pathCtl.metaPath = tmp;
+        m_pathCtl.metaPath = move(tmp);
         LoadContent(true);
     }
 }
@@ -634,11 +633,10 @@ void CFilesPPDlg::OnNMDblclkList2(NMHDR *pNMHDR, LRESULT *pResult)
         if (pNMItemActivate->uKeyFlags & LVKF_SHIFT)
         {
             // make a new top level window (complete with its own gui thread) to load subdir 
-
-            auto t = make_unique<CFilesPPDlgThread>();
-            t->dlg.m_pathCtl.metaPath = m_pathCtl.metaPath;
-            if (t->dlg.m_pathCtl.metaPath.Descend(item))//string(CT2CA(s))))
+            if (auto tmp = m_pathCtl.metaPath->Descend(item))
             {
+                auto t = make_unique<CFilesPPDlgThread>();
+                t->dlg.m_pathCtl.metaPath = move(tmp);
                 t->m_bAutoDelete = true;
                 t->dlg.filterSettings = filterSettings;
                 GetWindowRect(t->dlg.originatorWindowRect);
@@ -648,10 +646,11 @@ void CFilesPPDlg::OnNMDblclkList2(NMHDR *pNMHDR, LRESULT *pResult)
         }
         else
         {
-            m_pathCtl.PrepareNavigateBack();
-            if (m_pathCtl.metaPath.Descend(item)) // string(CT2CA(s))))
+            if (auto tmp = m_pathCtl.metaPath->Descend(item))
             {
                 // load subdir in this window
+                m_pathCtl.PrepareNavigateBack();
+                m_pathCtl.metaPath = move(tmp);
                 LoadContent(true);
             }
         }
@@ -975,9 +974,9 @@ void CFilesPPDlg::OnDropFiles(HDROP hDropInfo)
 void CFilesPPDlg::SavePlaylist()
 {
     fs::path path;
-    if (m_pathCtl.metaPath.GetLocalPath(path))
+    if (auto playlist = dynamic_cast<MetaPath_Playlist*>(m_pathCtl.metaPath.get()))
     {
-        ofstream outfile(path);
+        ofstream outfile(playlist->localPath);
         outfile << "[";
         int comma = 0;
         items.for_each([&comma, &outfile](std::unique_ptr<Item>& i){
@@ -1031,7 +1030,7 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 
         MenuActions ma;
         if (activeReader) ma = activeReader->GetMenuActions(selectedItems);
-        if (m_pathCtl.metaPath.getPathType() == MetaPath::Playlist)
+        if (dynamic_cast<MetaPath_Playlist*>(m_pathCtl.metaPath.get()))
         {
             ma.actions.emplace_back("Save Playlist", [this]()
             {
@@ -1050,7 +1049,7 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
 
             for (auto& item : *selectedItems)
             {
-                string fullpath = m_pathCtl.metaPath.GetFullPath(*item);
+                string fullpath = m_pathCtl.metaPath->GetFullPath(*item);
 
                 switch (result)
                 {
@@ -1128,7 +1127,7 @@ void CFilesPPDlg::OnLvnBegindragList2(NMHDR *pNMHDR, LRESULT *pResult)
         if (nItem < filteredItems.size())
         {
             std::string uncPath;
-            if (m_pathCtl.metaPath.GetDragDropUNCPath(filteredItems[nItem], uncPath))
+            if (m_pathCtl.metaPath->GetDragDropUNCPath(filteredItems[nItem], uncPath))
             {
                 string u16string;
                 m::MegaApi::utf8ToUtf16(uncPath.c_str(), &u16string);
@@ -1215,7 +1214,7 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
 
     if (pNMUpDown->iDelta > 0)
     {
-        if (g_mega->favourites.Toggle(m_pathCtl.metaPath))
+        if (g_mega->favourites.Toggle(*m_pathCtl.metaPath))
         {
             AfxMessageBox(_T("Added favourite"));
         }
@@ -1223,7 +1222,7 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
         {
             AfxMessageBox(_T("Removed favourite"));
         }
-        g_mega->saveFavourites(m_pathCtl.metaPath.Account());
+        g_mega->saveFavourites(m_pathCtl.metaPath->Account());
     }
     else if (pNMUpDown->iDelta < 0)
     {
@@ -1234,19 +1233,19 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
         MenuActions ma;
         for (unsigned i = 0; i < favourites.size(); ++i)
         {
-            auto test = favourites[i].Account();
+            auto test = favourites[i]->Account();
             if (test != currAcc)
             {
                 currAcc = test;
                 ma.actions.push_back(MenuActions::MenuItem{ currAcc ? OwnString(currAcc->masp->getMyEmail()) : string("<Local>") , nullptr, true });
             }
-            ma.actions.push_back(MenuActions::MenuItem{ favourites[i].u8DisplayPath() ,[thisfavourite = favourites[i], this]()
+            ma.actions.push_back(MenuActions::MenuItem{ favourites[i]->u8DisplayPath(), [thisfavourite = std::shared_ptr<MetaPath>(favourites[i]->clone()), this]()
                 {
                     if (GetKeyState(VK_SHIFT) & 0x8000)
                     {
                         // make a new top level window (complete with its own gui thread) to load subdir 
                         auto t = make_unique<CFilesPPDlgThread>();
-                        t->dlg.m_pathCtl.metaPath = thisfavourite;
+                        t->dlg.m_pathCtl.metaPath = thisfavourite->clone();
                         t->m_bAutoDelete = true;
                         GetWindowRect(t->dlg.originatorWindowRect);
                         if (!t->CreateThread()) AfxMessageBox(_T("Thread creation failed"));
@@ -1255,7 +1254,7 @@ void CFilesPPDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
                     else
                     {
                         m_pathCtl.PrepareNavigateBack();
-                        m_pathCtl.metaPath = thisfavourite;
+                        m_pathCtl.metaPath = thisfavourite->clone();
                         LoadContent(true);
                     }
 
