@@ -165,12 +165,12 @@ bool MetaPath_Playlist::GetDragDropUNCPath(Item* pItem, std::string& uncPath)
     return false;
 }
 
-string MetaPath_LocalFS::GetFullPath(Item& item)
+string MetaPath_LocalFS::GetFullPath(Item& item) const
 {
     return (localPath / fs::u8path(item.u8Name)).u8string();
 }
 
-string MetaPath_MegaFS::GetFullPath(Item& item)
+string MetaPath_MegaFS::GetFullPath(Item& item) const
 {
     if (auto p = dynamic_cast<ItemMegaNode*>(&item))
         if (auto ap = wap.lock())
@@ -227,4 +227,31 @@ std::unique_ptr<MetaPath> MetaPath::deserialize(const std::string& s)
         }
     }
     return nullptr;
+}
+
+
+std::unique_ptr<MetaPath> MetaPath_CompareView::Ascend() 
+{ 
+    auto ascend1 = view1->Ascend();
+    auto ascend2 = view2->Ascend();
+    if (ascend1 && ascend2)
+    {
+        return std::make_unique<MetaPath_CompareView>(move(ascend1), move(ascend2), differentOnly);
+    }
+    return nullptr; 
+}
+
+
+std::unique_ptr<MetaPath> MetaPath_CompareView::Descend(const Item& item)  
+{ 
+    if (auto p = dynamic_cast<const ItemCompareItem*>(&item))
+    {
+        auto descend1 = view1->Descend(*p->item1);
+        auto descend2 = view2->Descend(*p->item2);
+        if (descend1 && descend2)
+        {
+            return std::make_unique<MetaPath_CompareView>(move(descend1), move(descend2), differentOnly);
+        }
+    }
+    return nullptr; 
 }

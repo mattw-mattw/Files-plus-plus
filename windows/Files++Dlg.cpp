@@ -1069,7 +1069,7 @@ void CFilesPPDlg::OnNMRClickList2(NMHDR *pNMHDR, LRESULT *pResult)
         map<int, std::function<void()>> menuexec;
 
         MenuActions ma;
-        if (activeReader) ma = activeReader->GetMenuActions(selectedItems);
+        if (activeReader) ma = activeReader->GetMenuActions(selectedItems, *m_pathCtl.metaPath);
         if (dynamic_cast<MetaPath_Playlist*>(m_pathCtl.metaPath.get()))
         {
             ma.actions.emplace_back("Save Playlist", [this]()

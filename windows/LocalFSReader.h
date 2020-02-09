@@ -22,7 +22,7 @@ public:
 	LocalFSReader(std::filesystem::path p, bool normalizeSep, QueueTrigger, bool r, UserFeedback& uf);
 	~LocalFSReader();
 
-	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
+	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) override;
 
 private:
 

@@ -10,8 +10,6 @@ struct Item;
 
 struct MetaPath
 {
-    //enum PathType { None, TopShelf, LocalVolumes, LocalFS, MegaAccount, MegaChats, MegaChat, MegaFS, CommandHistory, Playlist };
-
 	virtual bool operator==(const MetaPath& o) const = 0;
 	virtual std::unique_ptr<MetaPath> clone() const = 0;
 	virtual std::unique_ptr<MetaPath> Ascend() = 0;
@@ -23,21 +21,10 @@ struct MetaPath
     virtual std::string serialize() = 0;
     static std::unique_ptr<MetaPath> deserialize(const std::string&);
 
-    //operator bool() { return pathType != None; }
-    //PathType getPathType() { return pathType; }
-    
-	virtual OwningAccountPtr Account() { return nullptr; }
+	virtual OwningAccountPtr Account() const { return nullptr; }
 	virtual bool GetDragDropUNCPath(Item*, std::string& uncPath) { return false; }
-	virtual std::string GetFullPath(Item&) { return std::string(); }
+	virtual std::string GetFullPath(Item&) const { return std::string(); }
 
-
-
-//private:
-//    PathType pathType = None;
-//    std::filesystem::path localPath;
-//	WeakAccountPtr wap;
-//    copy_ptr<m::MegaNode> mnode;
-//	copy_ptr<c::MegaChatRoom> chatroom;
 };
 
 struct MetaPath_TopShelf : MetaPath
@@ -76,7 +63,7 @@ struct MetaPath_LocalFS : MetaPath
 	std::string u8DisplayPath() const override { return localPath.u8string(); }
 	std::string serialize() override { return  "LocalFS/" + ToBase64(localPath.u8string()); }
 
-	std::string GetFullPath(Item&) override;
+	std::string GetFullPath(Item&) const override;
 	bool GetDragDropUNCPath(Item*, std::string& uncPath) override;
 
 	bool normalizeSeparator = false;
@@ -116,7 +103,7 @@ struct MetaPath_MegaAccount : MetaPath
 	std::string u8DisplayPath() const override;
 	std::string serialize() override { if (auto ap = wap.lock()) return  "MegaAccount/" + ToBase64(OwnString(ap->masp->getMyEmail())); else return ""; }
 
-	OwningAccountPtr Account() override { return OwningAccountPtr(wap); }
+	OwningAccountPtr Account() const override { return OwningAccountPtr(wap); }
 private:
 	WeakAccountPtr wap;
 };
@@ -133,8 +120,8 @@ struct MetaPath_MegaFS : MetaPath
 	std::string u8DisplayPath() const override { if (auto ap = wap.lock()) return OwnString(ap->masp->getNodePath(mnode.get())); else return ""; }
 	std::string serialize() override { if (auto ap = wap.lock()) return  "MegaFS/" + ToBase64(OwnString(ap->masp->getMyEmail())) + "/" + ToBase64(ap->masp->getNodePath(mnode.get())); else return ""; }
 
-	OwningAccountPtr Account() override { return OwningAccountPtr(wap); }
-	std::string GetFullPath(Item&) override;
+	OwningAccountPtr Account() const override { return OwningAccountPtr(wap); }
+	std::string GetFullPath(Item&) const override;
 	bool GetDragDropUNCPath(Item*, std::string& uncPath) override;
 
 private:
@@ -155,7 +142,7 @@ struct MetaPath_MegaChats : MetaPath
 	std::string u8DisplayPath() const override {return "<Chatrooms>"; }
 	std::string serialize() override { if (auto ap = wap.lock()) return  "MegaChats/" + ToBase64(OwnString(ap->masp->getMyEmail())); else return ""; }
 
-	OwningAccountPtr Account() override { return OwningAccountPtr(wap); }
+	OwningAccountPtr Account() const override { return OwningAccountPtr(wap); }
 
 private:
 	WeakAccountPtr wap;
@@ -174,7 +161,7 @@ struct MetaPath_MegaChat : MetaPath
 	std::string u8DisplayPath() const override {  return "<Chat>"; }
 	std::string serialize() override { if (auto ap = wap.lock()) return  "MegaChat/" + ToBase64(OwnString(ap->masp->getMyEmail())) + "/" + ToBase64_H8(chatroom->getChatId()); else return ""; }
 
-	OwningAccountPtr Account() override { return OwningAccountPtr(wap); }
+	OwningAccountPtr Account() const override { return OwningAccountPtr(wap); }
 
 private:
 	WeakAccountPtr wap;
@@ -194,7 +181,7 @@ struct MetaPath_CommandHistory : MetaPath
 	std::string u8DisplayPath() const override { return "<Command History>"; }
 	std::string serialize() override { return ""; }
 
-	OwningAccountPtr Account() override { return OwningAccountPtr(wap); }
+	OwningAccountPtr Account() const override { return OwningAccountPtr(wap); }
 
 private:
 	WeakAccountPtr wap;
@@ -207,8 +194,8 @@ struct MetaPath_CompareView : MetaPath
 
 	bool operator==(const MetaPath& o) const override { auto mp = dynamic_cast<const MetaPath_CompareView*>(&o); return mp && *mp->view1 == *view1 && *mp->view2 == *view2; }
 	std::unique_ptr<MetaPath> clone() const override { return std::make_unique<MetaPath_CompareView>(view1->clone(), view2->clone(), differentOnly); }
-	std::unique_ptr<MetaPath> Ascend() override { return nullptr; }
-	std::unique_ptr<MetaPath> Descend(const Item&) override { return nullptr; }
+	std::unique_ptr<MetaPath> Ascend() override;
+	std::unique_ptr<MetaPath> Descend(const Item&);
 	std::string u8DisplayPath() const override { return view1->u8DisplayPath() + " vs " + view2->u8DisplayPath() + (differentOnly ? " (different only)": ""); }
 	std::string serialize() override { return ""; }
 
@@ -221,6 +208,7 @@ private:
 	std::unique_ptr<MetaPath> view1;
 	std::unique_ptr<MetaPath> view2;
 	bool differentOnly;
+	friend struct CompareViewReader;
 };
 
 

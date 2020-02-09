@@ -5,6 +5,9 @@
 #include <WinIoCtl.h>
 #include "../core/PlatformSupplied.h"
 
+#include "../core/metapath.h"
+
+
 using namespace std;
 
 LocalVolumeReader::LocalVolumeReader(QueueTrigger t, bool r, UserFeedback& uf)
@@ -104,7 +107,7 @@ void ExploreProperties(HWND hwnd, const fs::path& p)
     ::ShellExecuteExW(&sei);
 }
 
-auto LocalFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
+auto LocalFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, const MetaPath& metapath) -> MenuActions
 {
     MenuActions ma;
     ma.actions.emplace_back("Explore To", [this, selectedItems]() { for (auto i : *selectedItems) ExploreTo(hwnd, dir / i->u8Name); });

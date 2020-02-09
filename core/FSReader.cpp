@@ -6,6 +6,9 @@
 #include "Item.h"
 #include <fstream>
 #include <mega/json.h>
+#include <taglib/tag.h>
+#include <taglib/fileref.h>
+#include <taglib/tpropertymap.h>
 
 using namespace std;
 
@@ -120,7 +123,7 @@ bool checkProAccount()
     return pro >= 1 || nonpro == 0;
 }
 
-auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
+auto TopShelfReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, const MetaPath&) -> MenuActions
 {
     MenuActions ma;
     if (selectedItems->size() == 1)
@@ -152,7 +155,7 @@ MegaAccountReader::~MegaAccountReader()
     workerthread.join();
 }
 
-auto MegaAccountReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) -> MenuActions
+auto MegaAccountReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) -> MenuActions
 {
     return MenuActions();
 }
@@ -203,7 +206,7 @@ MegaFSReader::~MegaFSReader()
     workerthread.join();
 }
 
-auto MegaFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
+auto MegaFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, const MetaPath&) -> MenuActions
 {
     MenuActions ma;
     if (selectedItems->size())
@@ -440,7 +443,7 @@ MegaChatRoomsReader::~MegaChatRoomsReader()
     workerthread.join();
 }
 
-auto MegaChatRoomsReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
+auto MegaChatRoomsReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, const MetaPath&) -> MenuActions
 {
     MenuActions ma;
     if (selectedItems->size())
@@ -702,7 +705,7 @@ MegaChatReader::~MegaChatReader()
     workerthread.join();
 }
 
-auto MegaChatReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems) -> MenuActions
+auto MegaChatReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, const MetaPath&) -> MenuActions
 {
     MenuActions ma;
 
@@ -765,7 +768,7 @@ CommandHistoryReader::~CommandHistoryReader()
     workerthread.join();
 }
 
-auto CommandHistoryReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) -> MenuActions
+auto CommandHistoryReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) -> MenuActions
 {
     return MenuActions();
 }
@@ -796,7 +799,7 @@ PlaylistReader::~PlaylistReader()
     workerthread.join();
 }
 
-auto PlaylistReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) -> MenuActions
+auto PlaylistReader::GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) -> MenuActions
 {
     MenuActions ma;
     ma.actions.emplace_back("Remove Song(s)", [this, selectedItems]()
@@ -892,12 +895,142 @@ CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differen
     columnDefs.push_back(ColumnDef{"Name2", 200, [](const Item* i){ auto& ii = static_cast<const ItemCompareItem*>(i)->item2; return ii->u8Name + (ii->isFolder() ? "/" : ""); }});
     columnDefs.push_back(ColumnDef{"Size1", 50, [](const Item* i){ auto& ii = static_cast<const ItemCompareItem*>(i)->item1; return ii->size() < 0 ? "" : to_string(ii->size()); }});
     columnDefs.push_back(ColumnDef{"Size2", 50, [](const Item* i){ auto& ii = static_cast<const ItemCompareItem*>(i)->item2; return ii->size() < 0 ? "" : to_string(ii->size()); }});
+
+    if (dynamic_cast<MegaFSReader*>(reader1.get()))
+    {
+        columnDefs.push_back(ColumnDef{"Title1", 200, [](const Item* i) -> string { 
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item1; 
+            if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
+                auto str = n->mnode->getCustomAttr("title");
+                return str ? str : string();
+            }
+            return "";
+        }});
+
+        columnDefs.push_back(ColumnDef{"Artist1", 200, [](const Item* i) -> string { 
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item1; 
+            if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
+                auto str = n->mnode->getCustomAttr("artist");
+                return str ? str : string();
+            }
+            return "";
+        }});
+
+        columnDefs.push_back(ColumnDef{"BPM1", 200, [](const Item* i) -> string { 
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item1; 
+            if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
+                auto str = n->mnode->getCustomAttr("BPM");
+                return str ? str : string();
+            }
+            return "";
+        }});
+    }
+
+    if (dynamic_cast<MegaFSReader*>(reader2.get()))
+    {
+        columnDefs.push_back(ColumnDef{"Title2", 200, [](const Item* i) -> string { 
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item2; 
+            if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
+                auto str = n->mnode->getCustomAttr("title");
+                return str ? str : string();
+            }
+            return "";
+        }});
+
+        columnDefs.push_back(ColumnDef{"Artist2", 200, [](const Item* i) -> string { 
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item2; 
+            if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
+                auto str = n->mnode->getCustomAttr("artist");
+                return str ? str : string();
+            }
+            return "";
+        }});
+
+        columnDefs.push_back(ColumnDef{"BPM2", 200, [](const Item* i) -> string { 
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item2; 
+            if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
+                auto str = n->mnode->getCustomAttr("BPM");
+                return str ? str : string();
+            }
+            return "";
+        }});
+    }
+
+
 }
 
 CompareViewReader::~CompareViewReader()
 {
     cancelling = true;
     workerthread.join();
+}
+
+void GetSongProperties(const fs::path& filepath, std::string& title, std::string& artist, std::string& bpm)
+try 
+{
+    TagLib::FileRef f((wchar_t*)filepath.u16string().c_str());
+
+    if(!f.isNull() && f.tag()) {
+
+        TagLib::Tag *tag = f.tag();
+
+        title = tag->title().toCString(true);
+        artist = tag->artist().toCString(true);
+
+        TagLib::PropertyMap tags = f.file()->properties();
+        auto it = tags.find("BPM");
+        if (it != tags.end())
+        {
+            for (auto& s : it->second) bpm = s.toCString(true);
+        }
+    }
+}
+catch (...)
+{
+}
+
+auto CompareViewReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, const MetaPath& metapath) -> MenuActions
+{
+    MenuActions ma;
+    if (selectedItems->size() > 0)
+    {
+        if (auto mp = dynamic_cast<const MetaPath_CompareView*>(&metapath))
+        {
+
+            ma.actions.emplace_back("Song analysis / Set Attributes", [this, selectedItems, mp]() { 
+                for (auto i : *selectedItems) 
+                {
+
+                    auto ici = static_cast<ItemCompareItem*>(i);
+                    auto imn1 = dynamic_cast<ItemMegaNode*>(ici->item1.get());
+                    auto imn2 = dynamic_cast<ItemMegaNode*>(ici->item2.get());
+                    auto ilf1 = dynamic_cast<ItemLocalFS*>(ici->item1.get());
+                    auto ilf2 = dynamic_cast<ItemLocalFS*>(ici->item2.get());
+                    auto lfs1 = dynamic_cast<const MetaPath_LocalFS*>(mp->view1.get());
+                    auto lfs2 = dynamic_cast<const MetaPath_LocalFS*>(mp->view2.get());
+                    auto rfs1 = dynamic_cast<const MetaPath_MegaFS*>(mp->view1.get());
+                    auto rfs2 = dynamic_cast<const MetaPath_MegaFS*>(mp->view2.get());
+
+                    OwningAccountPtr acc = rfs1 ? rfs1->Account() : (rfs2 ? rfs2->Account() : nullptr);
+                    string songfile = (lfs1 && ilf1) ? lfs1->GetFullPath(*ilf1) : ((lfs2 && ilf2) ? lfs2->GetFullPath(*ilf2) : "");
+                    m::MegaNode* mn = imn1 ? imn1->mnode.get() : (imn2 ? imn2->mnode.get() : nullptr);
+                    
+                    if (acc && mn && !songfile.empty()) 
+                    {
+                        string title, artist, bpm;
+                        GetSongProperties(fs::u8path(songfile), title, artist, bpm);
+                        if (!artist.empty() || !bpm.empty())
+                        {
+                            if (!title.empty()) acc->masp->setCustomNodeAttribute(mn, "title", title.c_str());
+                            if (!artist.empty()) acc->masp->setCustomNodeAttribute(mn, "artist", artist.c_str());
+                            if (!bpm.empty()) acc->masp->setCustomNodeAttribute(mn, "BPM", bpm.c_str());
+                        }
+                    }
+                }
+            });
+        }
+    }
+    return ma;
 }
 
 void CompareViewReader::Threaded()

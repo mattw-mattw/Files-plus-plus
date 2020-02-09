@@ -12,6 +12,10 @@ set(Mega3rdPartyDir "${CMAKE_CURRENT_LIST_DIR}/../3rdParty"  CACHE STRING "Third
 # specify the MEGA SDK location 
 include(${CMAKE_CURRENT_LIST_DIR}/MEGA.nz/MEGAchat/contrib/cmake/CMakeLists.txt)
 
+add_definitions( -DTAGLIB_STATIC )
+
+ImportStdVcpkgLibrary(taglib        tag tag tag tag)
+
 if (WIN32)
 
     set (CMAKE_MFC_FLAG 1)  # 1: use MFC as a static library
@@ -34,7 +38,7 @@ if (WIN32)
     )
     target_link_libraries("Files++" PUBLIC  debug uafxcwd.lib  # MFC libs first for correct new/delete linkage
                                             optimized uafxcw.lib
-                                            general Mega karere Iphlpapi.lib  Psapi.lib Userenv.lib )
+                                            general Mega karere taglib Iphlpapi.lib  Psapi.lib Userenv.lib )
     #libuv: Iphlpapi.lib  Psapi.lib 	Userenv.lib
 
     set_target_properties("Files++"  PROPERTIES

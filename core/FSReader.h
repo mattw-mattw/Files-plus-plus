@@ -58,7 +58,7 @@ struct FSReader
 	virtual ~FSReader() {}
 
 	// gui thread functions
-    virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) { return MenuActions(); }
+    virtual MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) { return MenuActions(); }
     virtual void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths);
     virtual void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes);
 
@@ -79,7 +79,7 @@ struct TopShelfReader : public FSReader
 	TopShelfReader(QueueTrigger t, bool r, UserFeedback& uf);
 	~TopShelfReader();
 
-	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
+	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) override;
 
 private:
 	void Threaded();
@@ -109,7 +109,7 @@ struct MegaAccountReader : public FSReader
 	MegaAccountReader(WeakAccountPtr p, QueueTrigger t, bool r, UserFeedback& uf);
 	~MegaAccountReader();
 
-	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
+	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) override;
 
 private:
 	void Threaded();
@@ -139,7 +139,7 @@ private:
     void RecursiveRead(m::MegaNode& mnode, const std::string& basepath);
     void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths) override;
     void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
-    auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems)->MenuActions override;
+    auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&)->MenuActions override;
 
 
 	NodeUpdateListener listener;
@@ -160,7 +160,7 @@ private:
 	void RecursiveRead(m::MegaNode& mnode, const std::string& basepath);
 	void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths) override;
 	void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
-	auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems)->MenuActions override;
+	auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&)->MenuActions override;
 
 	NodeUpdateListener listener;
 	OwningAccountPtr ap;  
@@ -201,7 +201,7 @@ private:
 	void RecursiveRead(m::MegaNode& mnode, const std::string& basepath);
 	void OnDragDroppedLocalItems(const std::deque<std::filesystem::path>& paths) override;
 	void OnDragDroppedMEGAItems(OwningApiPtr masp, const std::deque<std::unique_ptr<m::MegaNode>>& nodes) override;
-	auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems)->MenuActions override;
+	auto GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&)->MenuActions override;
 
 
 	//NotifyQueue<std::unique_ptr<m::MegaNodeList>> nq;
@@ -222,7 +222,7 @@ struct CommandHistoryReader : public FSReader
     CommandHistoryReader(QueueTrigger t, UserFeedback& uf);
     ~CommandHistoryReader();
 
-    MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
+    MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) override;
 
 private:
     void Threaded();
@@ -236,7 +236,7 @@ struct PlaylistReader : public FSReader
     PlaylistReader(const std::filesystem::path&, QueueTrigger t, bool r, UserFeedback& uf);
     ~PlaylistReader();
 
-    MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems) override;
+    MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) override;
 
 private:
     void Threaded();
@@ -254,6 +254,8 @@ struct CompareViewReader : FSReader
 
 	CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differentOnly, QueueTrigger t, bool r, UserFeedback& uf);
 	~CompareViewReader();
+
+	MenuActions GetMenuActions(std::shared_ptr<std::deque<Item*>> selectedItems, const MetaPath&) override;
 
 private:
 	void Threaded();
