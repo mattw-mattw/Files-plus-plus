@@ -289,6 +289,14 @@ bool PathCtrl::NavigateForward()
     return true;
 }
 
+CRect GetLocalRectIn(CWnd*w, CWnd* pw) {
+    CRect r;
+    w->GetWindowRect(r);
+    pw->ScreenToClient((POINT*)&r);
+    pw->ScreenToClient(((POINT*)&r)+1);
+    return r;
+}
+
 // CFilesPPDlg message handlers
 BOOL CFilesPPDlg::OnInitDialog()
 {
@@ -341,6 +349,25 @@ BOOL CFilesPPDlg::OnInitDialog()
         m_statusBar.SetSimple(true);
         GetDynamicLayout()->AddItem(IDC_STATUSBARPLACEHOLDER, CMFCDynamicLayout::MoveVertical(100), CMFCDynamicLayout::SizeHorizontal(100));
     }
+
+    CRect localrect;
+    GetClientRect(localrect);
+    CRect cwr = GetLocalRectIn(&m_contentCtl, this);
+    CRect sbr = GetLocalRectIn(&m_statusBar, this);
+    CRect fbr = GetLocalRectIn(&m_filterButton, this);
+    CRect scr = GetLocalRectIn(&m_spinCtrl, this);
+    CRect pcr = GetLocalRectIn(&m_pathCtl, this);
+    
+    m_contentCtl.MoveWindow(0, fbr.bottom, localrect.Width(), localrect.Height()-fbr.bottom-sbr.Height());
+    m_filterButton.MoveWindow(localrect.Width()-fbr.Width(), 0, fbr.Width(), fbr.Height());
+    m_spinCtrl.MoveWindow(localrect.Width()-fbr.Width()-scr.Width(), 0, scr.Width(), fbr.Height());
+    m_pathCtl.MoveWindow(pcr.left, 0, localrect.Width()-fbr.Width()-scr.Width()-pcr.left, fbr.Height());
+
+    GetDynamicLayout()->AddItem(m_contentCtl.m_hWnd, CMFCDynamicLayout::MoveNone(), CMFCDynamicLayout::SizeHorizontalAndVertical(100,100));
+    GetDynamicLayout()->AddItem(m_filterButton.m_hWnd, CMFCDynamicLayout::MoveHorizontal(100), CMFCDynamicLayout::SizeNone());
+    GetDynamicLayout()->AddItem(m_spinCtrl.m_hWnd, CMFCDynamicLayout::MoveHorizontal(100), CMFCDynamicLayout::SizeNone());
+    GetDynamicLayout()->AddItem(m_pathCtl.m_hWnd, CMFCDynamicLayout::MoveNone(), CMFCDynamicLayout::SizeHorizontal(100));
+
 
     if (originatorWindowRect.Height() && originatorWindowRect.Width())
     {
