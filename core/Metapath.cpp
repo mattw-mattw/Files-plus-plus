@@ -39,7 +39,7 @@ std::unique_ptr<MetaPath> MetaPath_MegaFS::Ascend()
 }
 
 
-std::unique_ptr<MetaPath> MetaPath_TopShelf::Descend(const Item& item) 
+std::unique_ptr<MetaPath> MetaPath_TopShelf::Descend(const Item& item)
 {
     if (auto i = dynamic_cast<const ItemMegaAccount*>(&item))
     {
@@ -62,7 +62,7 @@ std::unique_ptr<MetaPath> MetaPath_TopShelf::Descend(const Item& item)
     return nullptr;
 }
 
-std::unique_ptr<MetaPath> MetaPath_LocalFS::Descend(const Item& item) 
+std::unique_ptr<MetaPath> MetaPath_LocalFS::Descend(const Item& item)
 {
     fs::path newpath = localPath / fs::u8path(item.u8Name);
     std::error_code ec;
@@ -84,7 +84,7 @@ std::unique_ptr<MetaPath> MetaPath_LocalFS::Descend(const Item& item)
     return nullptr;
 }
 
-std::unique_ptr<MetaPath> MetaPath_LocalVolumes::Descend(const Item& item) 
+std::unique_ptr<MetaPath> MetaPath_LocalVolumes::Descend(const Item& item)
 {
     auto p = fs::u8path(item.u8Name + "\\");
     std::error_code ec;
@@ -95,7 +95,7 @@ std::unique_ptr<MetaPath> MetaPath_LocalVolumes::Descend(const Item& item)
     return nullptr;
 }
 
-std::unique_ptr<MetaPath> MetaPath_MegaAccount::Descend(const Item& item) 
+std::unique_ptr<MetaPath> MetaPath_MegaAccount::Descend(const Item& item)
 {
     if (auto ap = wap.lock())
     {
@@ -115,7 +115,7 @@ std::unique_ptr<MetaPath> MetaPath_MegaAccount::Descend(const Item& item)
     return nullptr;
 }
 
-std::unique_ptr<MetaPath> MetaPath_MegaChats::Descend(const Item& item) 
+std::unique_ptr<MetaPath> MetaPath_MegaChats::Descend(const Item& item)
 {
     if (auto p = dynamic_cast<const ItemMegaChat*>(&item))
         if (auto ap = wap.lock())
@@ -123,7 +123,7 @@ std::unique_ptr<MetaPath> MetaPath_MegaChats::Descend(const Item& item)
     return nullptr;
 }
 
-std::unique_ptr<MetaPath> MetaPath_MegaFS::Descend(const Item& item) 
+std::unique_ptr<MetaPath> MetaPath_MegaFS::Descend(const Item& item)
 {
     if (auto i = dynamic_cast<const ItemMegaNode*>(&item))
         if (i->isFolder())
@@ -142,9 +142,9 @@ bool MetaPath_LocalFS::GetDragDropUNCPath(Item* pItem, std::string& uncPath)
 
 bool MetaPath_MegaFS::GetDragDropUNCPath(Item* pItem, std::string& uncPath)
 {
-    if (auto p = dynamic_cast<ItemMegaNode*>(pItem)) 
+    if (auto p = dynamic_cast<ItemMegaNode*>(pItem))
         if (auto ap = wap.lock())
-        {   
+        {
             uncPath = PlatformMegaUNCPrefix(ap->masp.get()) + ap->masp->getNodePath(p->mnode.get());
             return true;
         }
@@ -153,8 +153,8 @@ bool MetaPath_MegaFS::GetDragDropUNCPath(Item* pItem, std::string& uncPath)
 
 bool MetaPath_Playlist::GetDragDropUNCPath(Item* pItem, std::string& uncPath)
 {
-    if (auto p = dynamic_cast<ItemMegaNode*>(pItem)) 
-    {    
+    if (auto p = dynamic_cast<ItemMegaNode*>(pItem))
+    {
         OwningAccountPtr ap;
         if (auto n = g_mega->findNode(p->mnode->getHandle(), &ap))
         {
@@ -174,11 +174,11 @@ string MetaPath_MegaFS::GetFullPath(Item& item) const
 {
     if (auto p = dynamic_cast<ItemMegaNode*>(&item))
         if (auto ap = wap.lock())
-            return ap->masp->getNodePath(p->mnode.get());  
+            return ap->masp->getNodePath(p->mnode.get());
     return string();
 }
 
-std::string MetaPath_MegaAccount::u8DisplayPath() const 
+std::string MetaPath_MegaAccount::u8DisplayPath() const
 {
     if (auto ap = wap.lock())
     {
@@ -210,7 +210,7 @@ std::unique_ptr<MetaPath> MetaPath::deserialize(const std::string& s)
     {
         auto acc = MEGA::FromBase64(s.substr(12));
         for (auto ptr : g_mega->accounts())
-            if (acc == OwnString(ptr->masp->getMyEmail())) 
+            if (acc == OwnString(ptr->masp->getMyEmail()))
                 return std::make_unique<MetaPath_MegaAccount>(ptr);
     }
     if (s.size() >= 8 && s.substr(0, 7) == "MegaFS/")
@@ -221,7 +221,7 @@ std::unique_ptr<MetaPath> MetaPath::deserialize(const std::string& s)
             auto acc = MEGA::FromBase64(s.substr(7, n-7));
             auto path = MEGA::FromBase64(s.substr(n+1));
             for (auto ptr : g_mega->accounts())
-                if (acc == OwnString(ptr->masp->getMyEmail())) 
+                if (acc == ptr->accountEmail)
                     if (auto mnode = std::unique_ptr<m::MegaNode>(ptr->masp->getNodeByPath(path.c_str())))
                         return std::make_unique<MetaPath_MegaFS>(ptr, move(mnode));
         }
@@ -230,20 +230,20 @@ std::unique_ptr<MetaPath> MetaPath::deserialize(const std::string& s)
 }
 
 
-std::unique_ptr<MetaPath> MetaPath_CompareView::Ascend() 
-{ 
+std::unique_ptr<MetaPath> MetaPath_CompareView::Ascend()
+{
     auto ascend1 = view1->Ascend();
     auto ascend2 = view2->Ascend();
     if (ascend1 && ascend2)
     {
         return std::make_unique<MetaPath_CompareView>(move(ascend1), move(ascend2), differentOnly);
     }
-    return nullptr; 
+    return nullptr;
 }
 
 
-std::unique_ptr<MetaPath> MetaPath_CompareView::Descend(const Item& item)  
-{ 
+std::unique_ptr<MetaPath> MetaPath_CompareView::Descend(const Item& item)
+{
     if (auto p = dynamic_cast<const ItemCompareItem*>(&item))
     {
         auto descend1 = view1->Descend(*p->item1);
@@ -253,5 +253,5 @@ std::unique_ptr<MetaPath> MetaPath_CompareView::Descend(const Item& item)
             return std::make_unique<MetaPath_CompareView>(move(descend1), move(descend2), differentOnly);
         }
     }
-    return nullptr; 
+    return nullptr;
 }

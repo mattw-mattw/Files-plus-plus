@@ -64,7 +64,7 @@ MEGA::~MEGA()
     std::vector<std::weak_ptr<Account>> aps;
     std::vector<std::weak_ptr<PublicFolder>> fps;
     std::vector<std::weak_ptr<m::MegaApi>> mas;
-    
+
     {
         std::lock_guard g(m);
         for (auto& a : megaAccounts) { aps.push_back(a); mas.push_back(a->masp); a.reset(); }
@@ -84,16 +84,16 @@ MEGA::~MEGA()
 std::unique_ptr<m::MegaNode> MEGA::findNode(m::MegaHandle h, OwningAccountPtr* oap)
 {
     std::lock_guard g(m);
-    for (auto& a : megaAccounts) 
-    { 
+    for (auto& a : megaAccounts)
+    {
         if (auto p = a->masp->getNodeByHandle(h))
         {
             if (oap) *oap = a;
             return std::unique_ptr<m::MegaNode>(p);
         }
     }
-    for (auto& a : megaFolderLinks) 
-    { 
+    for (auto& a : megaFolderLinks)
+    {
         if (auto p = a->masp->getNodeByHandle(h))
         {
             return std::unique_ptr<m::MegaNode>(p);
@@ -113,7 +113,7 @@ void MEGA::loadFavourites(OwningAccountPtr macc)
         auto mp = MetaPath::deserialize(s);
         if (mp) favourites.Toggle(*mp);
     }
-}                                                                                               
+}
 
 void MEGA::saveFavourites(OwningAccountPtr macc)
 {
@@ -151,6 +151,7 @@ void MEGA::onLogin(const m::MegaError* e, OwningAccountPtr macc)
 	}
 	else
 	{
+        macc->accountEmail = OwnString(macc->masp->getMyEmail());
 		macc->masp->fetchNodes(new OneTimeListener([this, macc](m::MegaRequest* request, m::MegaError* e)
 			{
 				if (e && e->getErrorCode()) ReportError("MEGA account FetchNodes failed: ", e);
@@ -291,9 +292,9 @@ void MEGA::deletecache(OwningAccountPtr ap)
     }
 }
 
-std::string MEGA::ToBase64(const std::string& s) 
-{ 
-    return OwnString(m::MegaApi::binaryToBase64(s.data(), s.size())); 
+std::string MEGA::ToBase64(const std::string& s)
+{
+    return OwnString(m::MegaApi::binaryToBase64(s.data(), s.size()));
 }
 
 std::string MEGA::FromBase64(const std::string& s)
@@ -306,8 +307,8 @@ std::string MEGA::FromBase64(const std::string& s)
     return ret;
 }
 
-std::string ToBase64(const std::string& s) 
-{ 
+std::string ToBase64(const std::string& s)
+{
     return MEGA::ToBase64(s);
 }
 
@@ -316,8 +317,8 @@ std::string FromBase64(const std::string& s)
     return MEGA::FromBase64(s);
 }
 
-std::string ToBase64_H8(m::MegaHandle h) 
-{ 
+std::string ToBase64_H8(m::MegaHandle h)
+{
     return OwnString(m::MegaApi::userHandleToBase64(h));
 }
 
@@ -335,8 +336,8 @@ MRequest::MRequest(const OwningApiPtr& masp, const std::string& a)
     g_mega->AddMRequest(masp, std::shared_ptr<MRequest>(this));
 }
 
-MRequest::MRequest(const OwningApiPtr& masp, const std::string& a, std::function<void(m::MegaRequest* request, m::MegaError* e)> f) 
-    : OneTimeListener(f) 
+MRequest::MRequest(const OwningApiPtr& masp, const std::string& a, std::function<void(m::MegaRequest* request, m::MegaError* e)> f)
+    : OneTimeListener(f)
     , mawp(masp)
     , action(a)
 {

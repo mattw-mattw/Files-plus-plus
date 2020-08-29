@@ -24,7 +24,7 @@ struct MetaPath
 	virtual OwningAccountPtr Account() const { return nullptr; }
 	virtual bool GetDragDropUNCPath(Item*, std::string& uncPath) { return false; }
 	virtual std::string GetFullPath(Item&) const { return std::string(); }
-
+	virtual ~MetaPath() {}
 };
 
 struct MetaPath_TopShelf : MetaPath
@@ -199,9 +199,9 @@ struct MetaPath_CompareView : MetaPath
 	std::string u8DisplayPath() const override { return view1->u8DisplayPath() + " vs " + view2->u8DisplayPath() + (differentOnly ? " (different only)": ""); }
 	std::string serialize() override { return ""; }
 
-	std::unique_ptr<FSReader> GetContentReader(QueueTrigger t, bool recurse, UserFeedback& uf) const override 
-	{ 
-		return std::make_unique<CompareViewReader>(*view1, *view2, differentOnly, t, recurse, uf); 
+	std::unique_ptr<FSReader> GetContentReader(QueueTrigger t, bool recurse, UserFeedback& uf) const override
+	{
+		return std::make_unique<CompareViewReader>(*view1, *view2, differentOnly, t, recurse, uf);
 	}
 
 private:

@@ -11,6 +11,7 @@ struct ItemQueue;
 
 struct Account : std::enable_shared_from_this<Account>
 {
+	std::string accountEmail;
 	std::filesystem::path cacheFolder;
 	OwningApiPtr masp;
 	OwningChatPtr mcsp;

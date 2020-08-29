@@ -12,7 +12,7 @@ set(Mega3rdPartyDir "${CMAKE_CURRENT_LIST_DIR}/../3rdParty"  CACHE STRING "Third
 # specify the MEGA SDK location 
 include(${CMAKE_CURRENT_LIST_DIR}/MEGA.nz/MEGAchat/contrib/cmake/CMakeLists.txt)
 
-add_definitions( -DTAGLIB_STATIC )
+add_definitions( -DTAGLIB_STATIC -DUNICODE -D_UNICODE)
 
 ImportStdVcpkgLibrary(taglib        tag tag tag tag)
 
