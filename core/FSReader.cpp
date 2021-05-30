@@ -236,20 +236,31 @@ auto MegaFSReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, const 
         }
 
         ma.actions.emplace_back("Send to Trash", [=, masp = masp]()
-            {  
-                unique_ptr<m::MegaNode> bin(masp->getRubbishNode()); 
-                for (auto i : *selectedItems) 
-                    if (auto n = dynamic_cast<ItemMegaNode*>(i)) 
-                        masp->moveNode(n->mnode.get(), bin.get()); 
+            {
+                unique_ptr<m::MegaNode> bin(masp->getRubbishNode());
+                for (auto i : *selectedItems)
+                    if (auto n = dynamic_cast<ItemMegaNode*>(i))
+                        masp->moveNode(n->mnode.get(), bin.get());
             });
 
         ma.actions.emplace_back("Delete (no undo)", [=, masp = masp]()
-            { 
+            {
             if (QueryUserOkCancel("Please confirm permanent delete"))
                 for (auto i : *selectedItems)
                     if (auto n = dynamic_cast<ItemMegaNode*>(i))
                         masp->remove(n->mnode.get(), new MRequest(masp, "Delete node " + OwnString(masp->getNodePath(n->mnode.get()))));
             });
+    }
+    else
+    {
+        ma.actions.emplace_back("Create Folder", [=, masp = masp]()
+        {
+            string msg;
+            if (InputUserChatMessage(msg))
+            {
+                masp->createFolder(msg.c_str(), mnode.get());
+            }
+        });
     }
     return ma;
 };
@@ -689,8 +700,8 @@ MegaChatReader::MegaChatReader(OwningAccountPtr p, std::unique_ptr<c::MegaChatRo
                                              [](const Item* i){ return int64_t(static_cast<const ItemMegaChatMessage*>(i)->message->getMsgIndex()); },
                                              [](const Item* i){ return int64_t(static_cast<const ItemMegaChatMessage*>(i)->message->getMsgIndex()); }});
     columnDefs.push_back(ColumnDef{"Name", 100, [p](const Item* i)
-            { 
-                auto handle = static_cast<const ItemMegaChatMessage*>(i)->message->getUserHandle(); 
+            {
+                auto handle = static_cast<const ItemMegaChatMessage*>(i)->message->getUserHandle();
                 return g_mega->users.Firstname(handle, *p->masp);
             }});
     columnDefs.push_back(ColumnDef{"Message", 500, [](const Item* i){ auto p = static_cast<const ItemMegaChatMessage*>(i)->message->getContent(); return p ? p : "<null>"; }});
@@ -884,7 +895,7 @@ void PlaylistReader::Threaded()
 }
 
 
-CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differentonly, QueueTrigger t, bool r, UserFeedback& uf) 
+CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differentonly, QueueTrigger t, bool r, UserFeedback& uf)
     : FSReader(t, r, uf)
     , reader1(mp1.GetContentReader(compare_trigger, r, uf))
     , reader2(mp2.GetContentReader(compare_trigger, r, uf))
@@ -898,8 +909,8 @@ CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differen
 
     if (dynamic_cast<MegaFSReader*>(reader1.get()))
     {
-        columnDefs.push_back(ColumnDef{"Title1", 200, [](const Item* i) -> string { 
-            auto& ii = static_cast<const ItemCompareItem*>(i)->item1; 
+        columnDefs.push_back(ColumnDef{"Title1", 200, [](const Item* i) -> string {
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item1;
             if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
                 auto str = n->mnode->getCustomAttr("title");
                 return str ? str : string();
@@ -907,8 +918,8 @@ CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differen
             return "";
         }});
 
-        columnDefs.push_back(ColumnDef{"Artist1", 200, [](const Item* i) -> string { 
-            auto& ii = static_cast<const ItemCompareItem*>(i)->item1; 
+        columnDefs.push_back(ColumnDef{"Artist1", 200, [](const Item* i) -> string {
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item1;
             if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
                 auto str = n->mnode->getCustomAttr("artist");
                 return str ? str : string();
@@ -916,8 +927,8 @@ CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differen
             return "";
         }});
 
-        columnDefs.push_back(ColumnDef{"BPM1", 200, [](const Item* i) -> string { 
-            auto& ii = static_cast<const ItemCompareItem*>(i)->item1; 
+        columnDefs.push_back(ColumnDef{"BPM1", 200, [](const Item* i) -> string {
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item1;
             if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
                 auto str = n->mnode->getCustomAttr("BPM");
                 return str ? str : string();
@@ -928,8 +939,8 @@ CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differen
 
     if (dynamic_cast<MegaFSReader*>(reader2.get()))
     {
-        columnDefs.push_back(ColumnDef{"Title2", 200, [](const Item* i) -> string { 
-            auto& ii = static_cast<const ItemCompareItem*>(i)->item2; 
+        columnDefs.push_back(ColumnDef{"Title2", 200, [](const Item* i) -> string {
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item2;
             if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
                 auto str = n->mnode->getCustomAttr("title");
                 return str ? str : string();
@@ -937,8 +948,8 @@ CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differen
             return "";
         }});
 
-        columnDefs.push_back(ColumnDef{"Artist2", 200, [](const Item* i) -> string { 
-            auto& ii = static_cast<const ItemCompareItem*>(i)->item2; 
+        columnDefs.push_back(ColumnDef{"Artist2", 200, [](const Item* i) -> string {
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item2;
             if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
                 auto str = n->mnode->getCustomAttr("artist");
                 return str ? str : string();
@@ -946,8 +957,8 @@ CompareViewReader::CompareViewReader(MetaPath& mp1, MetaPath& mp2, bool differen
             return "";
         }});
 
-        columnDefs.push_back(ColumnDef{"BPM2", 200, [](const Item* i) -> string { 
-            auto& ii = static_cast<const ItemCompareItem*>(i)->item2; 
+        columnDefs.push_back(ColumnDef{"BPM2", 200, [](const Item* i) -> string {
+            auto& ii = static_cast<const ItemCompareItem*>(i)->item2;
             if (auto n = dynamic_cast<ItemMegaNode*>(ii.get())) {
                 auto str = n->mnode->getCustomAttr("BPM");
                 return str ? str : string();
@@ -966,7 +977,7 @@ CompareViewReader::~CompareViewReader()
 }
 
 void GetSongProperties(const fs::path& filepath, std::string& title, std::string& artist, std::string& bpm)
-try 
+try
 {
     TagLib::FileRef f((wchar_t*)filepath.u16string().c_str());
 
@@ -997,8 +1008,8 @@ auto CompareViewReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, c
         if (auto mp = dynamic_cast<const MetaPath_CompareView*>(&metapath))
         {
 
-            ma.actions.emplace_back("Song analysis / Set Attributes", [this, selectedItems, mp]() { 
-                for (auto i : *selectedItems) 
+            ma.actions.emplace_back("Song analysis / Set Attributes", [this, selectedItems, mp]() {
+                for (auto i : *selectedItems)
                 {
 
                     auto ici = static_cast<ItemCompareItem*>(i);
@@ -1014,8 +1025,8 @@ auto CompareViewReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, c
                     OwningAccountPtr acc = rfs1 ? rfs1->Account() : (rfs2 ? rfs2->Account() : nullptr);
                     string songfile = (lfs1 && ilf1) ? lfs1->GetFullPath(*ilf1) : ((lfs2 && ilf2) ? lfs2->GetFullPath(*ilf2) : "");
                     m::MegaNode* mn = imn1 ? imn1->mnode.get() : (imn2 ? imn2->mnode.get() : nullptr);
-                    
-                    if (acc && mn && !songfile.empty()) 
+
+                    if (acc && mn && !songfile.empty())
                     {
                         string title, artist, bpm;
                         GetSongProperties(fs::u8path(songfile), title, artist, bpm);
@@ -1087,7 +1098,7 @@ void CompareViewReader::Threaded()
         }
         else
         {
-            if (!differentOnly || (*iter1)->size() != (*iter2)->size()) 
+            if (!differentOnly || (*iter1)->size() != (*iter2)->size())
                 itemQueue->Queue(NEWITEM, std::make_unique<ItemCompareItem>(move(*iter1), move(*iter2)));
             ++iter1, ++iter2;
         }

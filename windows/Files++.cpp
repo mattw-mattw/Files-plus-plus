@@ -100,9 +100,9 @@ BOOL CFilesPPApp::InitInstance()
 
 	std::mutex m;
 	std::unique_lock g(m);
-	CFilesPPDlg::shutdown_cv.wait(g, []() 
-	{ 
-		return CFilesPPDlg::atomicExitOk > 0; 
+	CFilesPPDlg::shutdown_cv.wait(g, []()
+	{
+		return CFilesPPDlg::atomicExitOk > 0;
 	});
 
 	// Delete the shell manager created above.
