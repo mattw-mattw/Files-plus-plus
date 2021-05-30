@@ -245,7 +245,7 @@ void MEGA::logoutremove(OwningAccountPtr ap)
 {
 	if (ap->masp->isLoggedIn())
 	{
-		ap->masp->logout(new OneTimeListener([this, ap](m::MegaRequest*, m::MegaError* e) {
+		ap->masp->logout(false, new OneTimeListener([this, ap](m::MegaRequest*, m::MegaError* e) {
 			if (e && e->getErrorCode() != m::MegaError::API_OK) ReportError("Logout API error: ", e);
             ap->mcsp->logout(new OneTimeChatListener([this, ap](c::MegaChatRequest* request, c::MegaChatError* ce) {
                 if (ce && ce->getErrorCode() != c::MegaChatError::ERROR_OK) ReportError("Logout Chat error: ", ce);
