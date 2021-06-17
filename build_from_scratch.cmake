@@ -137,6 +137,7 @@ endif()
 set(_common_cmake_args
     "-DMega3rdPartyDir=${_3rdparty_dir}"
 	"-DMegaSdkDir=${_sdk_dir}"
+	"-DMEGA_PROJECT_NAME=FilesPlusPlus"
     "-DVCPKG_TRIPLET=${_triplet}"
 	"-DUSE_WEBRTC=0"
     -DUSE_THIRDPARTY_FROM_VCPKG=1
