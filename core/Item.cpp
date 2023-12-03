@@ -6,6 +6,8 @@ using namespace std;
 
 std::shared_ptr<ChatRoomListener> Account::getChatListener(c::MegaChatHandle roomid, std::shared_ptr<ItemQueue> iq)
 {
+    if (!mcsp) return nullptr;
+
     bool open = false;
     std::shared_ptr<ChatRoomListener> p;
     std::map<c::MegaChatHandle, std::unique_ptr<c::MegaChatMessage>> catchupMessages;

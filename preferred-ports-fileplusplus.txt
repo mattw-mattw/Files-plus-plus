@@ -1,63 +1,73 @@
 
+# Common dependencies
+vcpkg-cmake-config/7476f0d4e77d3333fbb249657df8251c28c4faae
+vcpkg-cmake/7476f0d4e77d3333fbb249657df8251c28c4faae
+pkgconf/7476f0d4e77d3333fbb249657df8251c28c4faae
+vcpkg-pkgconfig-get-modules/7476f0d4e77d3333fbb249657df8251c28c4faae
+vcpkg-tool-meson/7476f0d4e77d3333fbb249657df8251c28c4faae
+vcpkg-cmake-get-vars/7476f0d4e77d3333fbb249657df8251c28c4faae
+
 # direct core dependencies of the SDK
-c-ares/c303dd024e2dc03a0665ddffbb12a1077933e649
+c-ares/c303dd024e2dc03a0665ddffbb12a1077933e649 all:on ios:off
 cryptopp/c303dd024e2dc03a0665ddffbb12a1077933e649
-curl/c303dd024e2dc03a0665ddffbb12a1077933e649:curl-empty-bindir.patch
-libsodium/c303dd024e2dc03a0665ddffbb12a1077933e649
-openssl/c303dd024e2dc03a0665ddffbb12a1077933e649
-openssl-unix/c303dd024e2dc03a0665ddffbb12a1077933e649
-openssl-windows/c303dd024e2dc03a0665ddffbb12a1077933e649
-readline/8.0 osx
-pcre/c303dd024e2dc03a0665ddffbb12a1077933e649
+curl/a42af01b72c28a8e1d7b48107b33e4f286a55ef6 all:on ios:off
+curl[core,sectransp]/7375bb408f2278d2f1875c259beef93332697ba7 all:off ios:curl-for-ios.patch
+libsodium/92adeffbce95847e141411177248ed04ac49ea9b all:on ios:libsodium-ios.patch
+# exe needed in openssl or libwebsockets can't build (as it can't generate certs)
+openssl[tools]/6172c4b5a08aecf5755f753c6338fa74103d39cf ios:off osx:off
+readline/8.0 all:off osx:on
 sqlite3/c303dd024e2dc03a0665ddffbb12a1077933e649
-zlib/c303dd024e2dc03a0665ddffbb12a1077933e649
-libuv/c303dd024e2dc03a0665ddffbb12a1077933e649
+zlib/e0a9559a9b24af116388eae242d675bf9fde025c
+
+# needed by the SDK if enabling serving/streaming (outgoing) files via http/s or include a an ftp server
+libuv/c303dd024e2dc03a0665ddffbb12a1077933e649 ios:off
 
 # mediainfo, customized with constrained functionality (determine media properties such as track length, codec, etc)
 libmediainfo/19.09
 libzen/0.4.37
 
 # ffmpeg (video preview/thumbnail generation)
-ffmpeg/c303dd024e2dc03a0665ddffbb12a1077933e649
+ffmpeg/c67a3059bbdb19799d402085e7323f71e7d68656 all:on ios:off osx:ffmpeg-osx-linker.patch
 
-#freeimage and its dependencies (image preview/thumbnail generation)
-freeimage/c47216ac7904b09187c119c7e4d010dcf993e3d5:freeimage-bool-typedef-and-xbm-msvc-compiler-bug.patch
-libpng/c303dd024e2dc03a0665ddffbb12a1077933e649
-libjpeg-turbo/c303dd024e2dc03a0665ddffbb12a1077933e649
-tiff/c303dd024e2dc03a0665ddffbb12a1077933e649
-openjpeg/c303dd024e2dc03a0665ddffbb12a1077933e649
-libwebp/c303dd024e2dc03a0665ddffbb12a1077933e649
-libraw/c303dd024e2dc03a0665ddffbb12a1077933e649
-jxrlib/c303dd024e2dc03a0665ddffbb12a1077933e649
-openexr/c303dd024e2dc03a0665ddffbb12a1077933e649:openexr-no-python.patch
-jasper/c303dd024e2dc03a0665ddffbb12a1077933e649:jasper-no-freeglut.patch
-liblzma/c303dd024e2dc03a0665ddffbb12a1077933e649
-#python3 not needed; it only provides python bindings to use openexr from python
-libffi/c303dd024e2dc03a0665ddffbb12a1077933e649
-opengl/c303dd024e2dc03a0665ddffbb12a1077933e649
+# freeimage and its dependencies (image preview/thumbnail generation)
+freeimage/7476f0d4e77d3333fbb249657df8251c28c4faae osx:freeimage-bool-typedef-xcode-compiler.patch
+libpng/7476f0d4e77d3333fbb249657df8251c28c4faae
+libjpeg-turbo/7476f0d4e77d3333fbb249657df8251c28c4faae
+tiff/7476f0d4e77d3333fbb249657df8251c28c4faae
+openjpeg/7476f0d4e77d3333fbb249657df8251c28c4faae
+libwebp/7476f0d4e77d3333fbb249657df8251c28c4faae
+libraw/7476f0d4e77d3333fbb249657df8251c28c4faae
+jxrlib/7476f0d4e77d3333fbb249657df8251c28c4faae
+openexr/7476f0d4e77d3333fbb249657df8251c28c4faae
+imath/7476f0d4e77d3333fbb249657df8251c28c4faae
+jasper/7476f0d4e77d3333fbb249657df8251c28c4faae all:jasper-no-freeglut.patch
+liblzma/7476f0d4e77d3333fbb249657df8251c28c4faae
+#opengl/c303dd024e2dc03a0665ddffbb12a1077933e649
 #freeglut (cross platform window manager) not needed; problematic on some platforms, pulling in many, many dependencies
 
 # pdfium libraries, specific version for build stability  (preview/thumbnail generation for pdfs)
 # (see 3rdParty_deps.txt on instructions on how to get source)
 # also, no v8 (javascript execution) etc
-pdfium/3710
-pdfium-freetype/2-8-73
+pdfium/5247
+freetype[core,bzip2,png,zlib]/6bf5ffffe875f2f824ca68eade4149587357880e
 
 # dependencies of pdfium
-icu/c303dd024e2dc03a0665ddffbb12a1077933e649
-lcms/c303dd024e2dc03a0665ddffbb12a1077933e649
-libjpeg-turbo/c303dd024e2dc03a0665ddffbb12a1077933e649
-openjpeg/c303dd024e2dc03a0665ddffbb12a1077933e649
+icu/979a5197b3389cfdf91d0ac5d98b6066ce73fd7a all:off osx:on linux:on
+icu/cb91b416cb8f85f0a55853baad23fb18d306148a all:on osx:off linux:off
+lcms/7476f0d4e77d3333fbb249657df8251c28c4faae
+#libjpeg-turbo already added above for freeimage
+#openjpeg already added above for freeimage
 # bzip2 and libpng will be used by pdfium if present, though there are no build errors if either are absent (except bzip2 on mac)
 bzip2/c303dd024e2dc03a0665ddffbb12a1077933e649
-libpng/c303dd024e2dc03a0665ddffbb12a1077933e649
 
 # tests and tools
 asio/c303dd024e2dc03a0665ddffbb12a1077933e649
 gtest/c303dd024e2dc03a0665ddffbb12a1077933e649
 
 #for megachat
-libwebsockets/2.4.2
+#libwebsockets/bb002cdd1a2c9eacbe60d8383fb5d437752b1e4e all:lws-4.2.patch
+libwebsockets/e0a9559a9b24af116388eae242d675bf9fde025c
+pthreads/bb002cdd1a2c9eacbe60d8383fb5d437752b1e4e
 
 #for this project!
 taglib/c303dd024e2dc03a0665ddffbb12a1077933e649

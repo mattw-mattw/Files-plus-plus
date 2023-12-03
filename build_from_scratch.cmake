@@ -30,6 +30,12 @@ if(NOT TRIPLET)
     usage_exit("Triplet was not provided")
 endif()
 
+if(NOT EXTRA_ARGS)
+    set(_extra_cmake_args "")
+else()
+    set(_extra_cmake_args ${EXTRA_ARGS})
+endif()
+
 set(_triplet ${TRIPLET})
 set(_filespp_dir "${_script_cwd}")
 set(_megachat_dir "${_filespp_dir}/mega.nz/MEGAchat")
@@ -88,6 +94,10 @@ set(_3rdparty_tool_common_args
     --triplet ${_triplet}
     --sdkroot ${_sdk_dir}
 )
+
+if(PLATFORM)
+    list(APPEND _3rdparty_tool_common_args --platform ${PLATFORM})
+endif()
 
 execute_checked_command(
     COMMAND ${_3rdparty_tool_exe}
@@ -150,7 +160,7 @@ endif()
 
 if(WIN32)
     if(_triplet MATCHES "staticdev$")
-        set(_extra_cmake_args -DMEGA_LINK_DYNAMIC_CRT=0 -DUNCHECKED_ITERATORS=1)
+        list(APPEND _extra_cmake_args -DMEGA_LINK_DYNAMIC_CRT=0 -DUNCHECKED_ITERATORS=1)
     endif()
 
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
@@ -166,7 +176,7 @@ if(WIN32)
 
     execute_checked_command(
         COMMAND ${_cmake}
-            -G "Visual Studio 16 2019"
+            -G "Visual Studio 17 2022"
             -A ${_arch}
             # Could also pass -T VCPKG_PLATFORM_TOOLSET
             -B ${_build_dir}

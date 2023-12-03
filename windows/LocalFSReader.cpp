@@ -315,7 +315,7 @@ void LocalFSReader::OnDragDroppedMEGAItems(OwningApiPtr masp, const deque<unique
 {
     for (auto& n : nodes)
     {
-        masp->startDownload(n.get(), (dir / n->getName()).u8string().c_str());
+        masp->startDownload(n.get(), (dir / n->getName()).u8string().c_str(), nullptr, nullptr, false, nullptr, m::MegaTransfer::COLLISION_CHECK_ASSUMEDIFFERENT, m::MegaTransfer::COLLISION_RESOLUTION_OVERWRITE, false, nullptr);
     }
     ReportError("Queued " + to_string(nodes.size()) + " paths for download");
 }

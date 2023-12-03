@@ -306,7 +306,7 @@ void MegaFSReader::OnDragDroppedLocalItems(const std::deque<std::filesystem::pat
 {
     for (auto p : paths)
     {
-        masp->startUpload(p.u8string().c_str(), mnode.get());
+        masp->startUpload(p.u8string().c_str(), mnode.get(), nullptr, m::MegaApi::INVALID_CUSTOM_MOD_TIME, nullptr, false, false, nullptr, nullptr);
     }
     ReportError("Queued " + to_string(paths.size()) + " paths for upload");
 }
@@ -325,28 +325,41 @@ string removebase(OwnStr& path, const string& basepath)
 
 void MegaFSReader::RecursiveRead(m::MegaNode& mnode, const string& basepath)
 {
-    unique_ptr<m::MegaChildrenLists> mc(masp->getFileFolderChildren(&mnode));
+    unique_ptr<m::MegaNodeList> mc(masp->getChildren(&mnode, m::MegaApi::ORDER_NONE, nullptr));
     if (mc)
     {
-        m::MegaNodeList* folders = mc->getFolderList();
-        m::MegaNodeList* files = mc->getFileList();
-
-        for (int i = 0; i < folders->size(); ++i)
+        for (int i = 0; i < mc->size(); ++i)
         {
-            auto node = folders->get(i);
+            auto node = mc->get(i);
             nodes_present.insert(node->getHandle());
             OwnStr path(masp->getNodePath(node), true);
             itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
-            if (recurse) RecursiveRead(*node, basepath);
-        }
-        for (int i = 0; i < files->size(); ++i)
-        {
-            auto node = files->get(i);
-            nodes_present.insert(node->getHandle());
-            OwnStr path(masp->getNodePath(node), true);
-            itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
+            if (recurse && node->isFolder()) RecursiveRead(*node, basepath);
         }
     }
+
+    //unique_ptr<m::MegaChildrenLists> mc(masp->getFileFolderChildren(&mnode));
+    //if (mc)
+    //{
+    //    m::MegaNodeList* folders = mc->getFolderList();
+    //    m::MegaNodeList* files = mc->getFileList();
+
+    //    for (int i = 0; i < folders->size(); ++i)
+    //    {
+    //        auto node = folders->get(i);
+    //        nodes_present.insert(node->getHandle());
+    //        OwnStr path(masp->getNodePath(node), true);
+    //        itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
+    //        if (recurse) RecursiveRead(*node, basepath);
+    //    }
+    //    for (int i = 0; i < files->size(); ++i)
+    //    {
+    //        auto node = files->get(i);
+    //        nodes_present.insert(node->getHandle());
+    //        OwnStr path(masp->getNodePath(node), true);
+    //        itemQueue->Queue(NEWITEM, std::make_unique<ItemMegaNode>(removebase(path, basepath), std::unique_ptr<m::MegaNode>(node->copy())));
+    //    }
+    //}
 }
 
 bool hasAncestor(std::unique_ptr<m::MegaNode> n, m::MegaNode* ancestor, m::MegaApi* api)
@@ -489,6 +502,8 @@ void MegaChatRoomsReader::OnDragDroppedLocalItems(const std::deque<std::filesyst
 
 void MegaChatRoomsReader::Threaded()
 {
+    if (!ap->mcsp) return;
+
     ap->masp->addGlobalListener(&listener);
 
     std::unique_ptr<c::MegaChatRoomList> crl(ap->mcsp->getChatRooms());
@@ -541,6 +556,8 @@ void ChatRoomListener::onChatRoomUpdate(c::MegaChatApi* api, c::MegaChatRoom* ch
     */
 void ChatRoomListener::onMessageLoaded(c::MegaChatApi* api, c::MegaChatMessage* msg)
 {
+    assert(ap->mcsp);
+
     if (msg)
     {
         std::set<std::shared_ptr<ItemQueue>> cb;
@@ -718,6 +735,8 @@ MegaChatReader::~MegaChatReader()
 
 auto MegaChatReader::GetMenuActions(shared_ptr<deque<Item*>> selectedItems, const MetaPath&) -> MenuActions
 {
+    assert(ap->mcsp);
+
     MenuActions ma;
 
     ma.actions.emplace_back("Send New Message", [this]()

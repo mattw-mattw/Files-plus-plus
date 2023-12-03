@@ -14,7 +14,7 @@ struct Account : std::enable_shared_from_this<Account>
 	std::string accountEmail;
 	std::filesystem::path cacheFolder;
 	OwningApiPtr masp;
-	OwningChatPtr mcsp;
+	OwningChatPtr mcsp; // may be null
 	std::shared_ptr<ChatRoomListener> getChatListener(c::MegaChatHandle roomid, std::shared_ptr<ItemQueue>);
 	void deregisterFromChatListener(c::MegaChatHandle roomid, std::shared_ptr<ItemQueue>);
 	std::string chatState = "<no chat>";  // todo: make thread safe, notify

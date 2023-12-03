@@ -29,8 +29,8 @@ MEGA::MEGA()
                     auto masp = make_shared<m::MegaApi>("BTgWXaYb", d->path().u8string().c_str(), "Files++");
                     masp->setLoggingName(d->path().filename().u8string().c_str());
 
-                    auto mcsp = make_shared<c::MegaChatApi>(masp.get());
-                    mcsp->init(nullptr);
+                    auto mcsp = make_shared<c::MegaChatApi>(nullptr /*masp.get()*/);
+                    //mcsp->init(nullptr);
 
                     megaAccounts.push_back(make_shared<Account>(d->path(), masp, mcsp));
                     masp->fastLogin(sid.c_str(), new OneTimeListener([this, account = megaAccounts.back()](m::MegaRequest* request, m::MegaError* e) { onLogin(e, account); }));
@@ -161,12 +161,12 @@ void MEGA::onLogin(const m::MegaError* e, OwningAccountPtr macc)
                 loadFavourites(macc);
                 if (macc->mcsp)
                 {
-                    macc->mcsp->connect(new OneTimeChatListener([wcp = WeakAccountPtr(macc)](c::MegaChatRequest* request, c::MegaChatError* ce) {
-                        if (auto macc = wcp.lock())
-                        {
-                            macc->chatState = ce && ce->getErrorCode() ? "<chat connect failed>" : macc->chatState = "<chat>";
-                        }
-                    }));
+                    //macc->mcsp->connect(new OneTimeChatListener([wcp = WeakAccountPtr(macc)](c::MegaChatRequest* request, c::MegaChatError* ce) {
+                    //    if (auto macc = wcp.lock())
+                    //    {
+                    //        macc->chatState = ce && ce->getErrorCode() ? "<chat connect failed>" : macc->chatState = "<chat>";
+                    //    }
+                    //}));
                 }
 			}));
 	}
@@ -245,13 +245,17 @@ void MEGA::logoutremove(OwningAccountPtr ap)
 {
 	if (ap->masp->isLoggedIn())
 	{
-		ap->masp->logout(false, new OneTimeListener([this, ap](m::MegaRequest*, m::MegaError* e) {
-			if (e && e->getErrorCode() != m::MegaError::API_OK) ReportError("Logout API error: ", e);
-            ap->mcsp->logout(new OneTimeChatListener([this, ap](c::MegaChatRequest* request, c::MegaChatError* ce) {
-                if (ce && ce->getErrorCode() != c::MegaChatError::ERROR_OK) ReportError("Logout Chat error: ", ce);
-                deletecache(ap);
-                }));
-			}));
+        ap->masp->logout(false, new OneTimeListener([this, ap](m::MegaRequest*, m::MegaError* e) {
+            if (e && e->getErrorCode() != m::MegaError::API_OK) ReportError("Logout API error: ", e);
+            if (ap->mcsp)
+            {
+                ap->mcsp->logout(new OneTimeChatListener([this, ap](c::MegaChatRequest* request, c::MegaChatError* ce) {
+                    if (ce && ce->getErrorCode() != c::MegaChatError::ERROR_OK) ReportError("Logout Chat error: ", ce);
+                    deletecache(ap);
+                    }));
+            }
+            else deletecache(ap);
+        }));
 	}
 	else
 	{

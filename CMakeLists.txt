@@ -10,6 +10,7 @@ project("Files++")
 set(Mega3rdPartyDir "${CMAKE_CURRENT_LIST_DIR}/../3rdParty"  CACHE STRING "Third party library location")
 
 # specify the MEGA SDK location 
+#include(${CMAKE_CURRENT_LIST_DIR}/MEGA.nz/sdk/contrib/cmake/CMakeLists.txt)
 include(${CMAKE_CURRENT_LIST_DIR}/MEGA.nz/MEGAchat/contrib/cmake/CMakeLists.txt)
 
 add_definitions( -DTAGLIB_STATIC -DUNICODE -D_UNICODE)
